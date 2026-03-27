@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pr-context"
+version = "0.1.0"
+description = "Local MCP-powered PR context engine for Claude"
+requires-python = ">=3.12"
+dependencies = [
+    "mcp[cli]",
+    "httpx",
+    "aiosqlite",
+    "pydantic-settings",
+    "click",
+    "python-dotenv",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pr_context"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
