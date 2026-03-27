@@ -6,7 +6,7 @@ Local-first MCP server that tracks GitHub PRs and exposes high-signal developer 
 
 ### Stack
 - **Python 3.12** with async throughout
-- **FastMCP** (official MCP Python SDK) with stdio transport
+- **FastMCP** (official MCP Python SDK) with SSE transport (stdio for local dev)
 - **SQLite** via `aiosqlite` for local state persistence
 - **httpx** for async GitHub GraphQL API calls
 - **pydantic-settings** for configuration
@@ -32,11 +32,16 @@ Local-first MCP server that tracks GitHub PRs and exposes high-signal developer 
 - **1 (normal):** New comments, PR status change
 - **0 (low):** CI recovered to green, draft status change
 
-### MCP Tools (MVP)
-- `get_my_prs` — all relevant PRs with minimal metadata
+### MCP Tools
+- `get_my_prs` — authored/assigned PRs with CI, review state, merge status, branches, last comment
+- `get_my_reviews` — PRs to review (from others), with new-commits detection and reviewer context
+- `get_pr_details` — full PR details (description, comments, reviews, CI, branches)
+- `get_pr_threads` — review threads with file paths and resolution status
+- `get_pr_comments` — top-level comments and review bodies
+- `get_pr_ci` — individual CI check details with URLs and timing
 - `get_pr_updates` — new changes since last check, filtered and prioritized
-- `get_pr_details` — full PR details (description, comments, reviews, CI)
-- `get_my_action_items` — PRs needing review, blocked/failing, items needing attention
+- `get_my_action_items` — actionable items separated by as_author/as_reviewer
+- `summarize_my_work_context` — full work context snapshot
 
 ### Configuration
 - `GITHUB_TOKEN` env var (required) — GitHub Personal Access Token
@@ -47,8 +52,8 @@ Local-first MCP server that tracks GitHub PRs and exposes high-signal developer 
 ### Docker
 - Single container, `python:3.12-slim` base
 - `docker-compose.yml` with named volume `pr-data` for SQLite DB
-- `stdin_open: true` for stdio MCP transport
-- Invoke via: `docker compose run --rm -i pr-context`
+- SSE transport on port 8321, restart unless-stopped
+- Invoke via: `docker compose up -d`
 
 ## Commands
 
@@ -57,14 +62,14 @@ Local-first MCP server that tracks GitHub PRs and exposes high-signal developer 
 pip install -e ".[dev]"
 
 # Run MCP server directly
-python -m pr_context.server
+python -m pr_context
 
 # Run tests
 pytest tests/
 
 # Docker
 docker compose build
-docker compose run --rm -i pr-context
+docker compose up -d
 
 # CLI (debug)
 python -m pr_context.cli check

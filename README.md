@@ -82,8 +82,24 @@ Username is auto-detected from the GitHub token via `viewer { login }`.
 
 ## MCP Tools
 
-- **`get_my_prs`** — List all relevant PRs with metadata
-- **`get_pr_updates`** — Changes since last check, filtered and prioritized
-- **`get_pr_details`** — Full PR details (description, comments, reviews, CI)
-- **`get_my_action_items`** — PRs needing review, blocked/failing, items needing attention
-- **`summarize_my_work_context`** — Full snapshot of your current work: authored PRs, reviews, action items, unread events
+### Your PRs
+- **`get_my_prs`** — PRs you authored or are assigned to, with CI status, review state, merge status, branch staleness, unresolved threads, and last comment preview. Use `role="all"` to include reviewer-only PRs.
+- **`get_my_reviews`** — PRs where you are a reviewer (excludes your own). Shows new commits since your last review, other reviewers' states, and how long the PR has been waiting.
+
+### PR Details
+- **`get_pr_details`** — Full PR info: description, comments, reviews, CI checks, branch names, merge state.
+- **`get_pr_threads`** — Review threads with file paths, comments, and resolution status.
+- **`get_pr_comments`** — Top-level comments and review bodies.
+- **`get_pr_ci`** — Individual CI check names, statuses, conclusions, URLs, and timing.
+
+### Updates & Actions
+- **`get_pr_updates`** — New changes since last check (comments, reviews, CI), filtered and prioritized. Includes `last_synced_at` timestamp.
+- **`get_my_action_items`** — Actionable items separated by role (`as_author` / `as_reviewer`): CI failures, changes requested, pending reviews, merge conflicts, behind branches, unresolved threads.
+- **`summarize_my_work_context`** — Full snapshot: authored PRs, reviewing PRs, action items, unread events.
+
+### Key Features
+- PRs are referenced by index number (e.g. `#1`, `#5`) across all tools
+- Smart review state: distinguishes `CHANGES_REQUESTED` from `RE_REVIEW_REQUESTED` (author re-requested review)
+- Branch staleness via `merge_state_status`: BEHIND, CLEAN, DIRTY, BLOCKED, etc.
+- Full comment/review/CI snapshots stored locally — last comment shown on PR summaries
+- Auto-sync with 5-minute cooldown, all data cached in SQLite
