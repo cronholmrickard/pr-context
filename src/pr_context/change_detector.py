@@ -156,6 +156,20 @@ async def _diff_pr(
                     priority=2,
                 ))
 
+    # New commits pushed (relevant for reviewers)
+    is_reviewer = "reviewer" in pr.user_roles
+    if old_pr and is_reviewer and not is_author:
+        old_commit_date = old_pr.get("latest_commit_date")
+        new_commit_date = pr.latest_commit_date.isoformat() if pr.latest_commit_date else None
+        if old_commit_date and new_commit_date and new_commit_date != old_commit_date:
+            events.append(_make_event(
+                pr_id=pr.id,
+                event_type="new_commits_pushed",
+                actor=pr.author,
+                summary=f"New commits pushed to {pr.title} — may need re-review",
+                priority=2,
+            ))
+
     # Draft status change
     if old_pr and bool(old_pr.get("draft")) != pr.draft:
         events.append(_make_event(

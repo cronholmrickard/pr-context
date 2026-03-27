@@ -93,7 +93,8 @@ Username is auto-detected from the GitHub token via `viewer { login }`.
 - **`get_pr_ci`** — Individual CI check names, statuses, conclusions, URLs, and timing.
 
 ### Updates & Actions
-- **`get_pr_updates`** — New changes since last check (comments, reviews, CI), filtered and prioritized. Includes `last_synced_at` timestamp.
+- **`get_pr_updates`** — Updates on your authored/assigned PRs (reviews received, CI changes, comments). Includes `last_synced_at` timestamp.
+- **`get_review_updates`** — Updates on PRs you're reviewing (new commits pushed, CI changes, comments). Includes `last_synced_at` timestamp.
 - **`get_my_action_items`** — Actionable items separated by role (`as_author` / `as_reviewer`): CI failures, changes requested, pending reviews, merge conflicts, behind branches, unresolved threads.
 - **`summarize_my_work_context`** — Full snapshot: authored PRs, reviewing PRs, action items, unread events.
 

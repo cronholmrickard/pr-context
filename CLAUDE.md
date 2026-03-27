@@ -39,7 +39,8 @@ Local-first MCP server that tracks GitHub PRs and exposes high-signal developer 
 - `get_pr_threads` — review threads with file paths and resolution status
 - `get_pr_comments` — top-level comments and review bodies
 - `get_pr_ci` — individual CI check details with URLs and timing
-- `get_pr_updates` — new changes since last check, filtered and prioritized
+- `get_pr_updates` — updates on authored/assigned PRs (reviews, CI, comments)
+- `get_review_updates` — updates on PRs you're reviewing (new commits, CI, comments)
 - `get_my_action_items` — actionable items separated by as_author/as_reviewer
 - `summarize_my_work_context` — full work context snapshot
 

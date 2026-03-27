@@ -547,26 +547,42 @@ async def get_pr_ci(pr_ref: str) -> dict:
     }
 
 
-@mcp.tool()
-async def get_pr_updates(since: str | None = None) -> dict:
-    """Get new changes since last check, filtered and prioritized.
+async def _get_updates(role_filter: str) -> dict:
+    """Shared logic for get_pr_updates and get_review_updates.
 
-    Returns unacknowledged events (new comments, reviews, CI changes, etc.)
-    sorted by priority. Events caused by you are excluded. After returning,
-    events are marked as acknowledged.
-
-    Args:
-        since: Not yet used. Reserved for future "since ISO datetime" filtering.
+    role_filter: "author" to get authored/assigned PR events,
+                 "reviewer" to get review PR events.
     """
-    assert db is not None
+    assert db is not None and username is not None
+    previous_sync = await db.get_metadata("last_full_sync")
     await _ensure_synced()
 
-    events = await db.get_unacknowledged_events()
-    count = await db.acknowledge_events()
-    last_sync = await db.get_metadata("last_full_sync")
+    if previous_sync is None:
+        return {
+            "first_sync": True,
+            "message": "First sync complete — baseline snapshot saved. Use get_my_prs or get_my_reviews to see current state. Future calls will show changes since this point.",
+            "last_synced_at": await db.get_metadata("last_full_sync"),
+            "events": [],
+            "total": 0,
+            "acknowledged": 0,
+        }
+
+    all_events = await db.get_unacknowledged_events()
+
+    filtered = []
+    for e in all_events:
+        roles = json.loads(e.get("user_roles", "[]")) if isinstance(e.get("user_roles"), str) else e.get("user_roles", [])
+        is_author = e.get("author", "").lower() == username.lower()
+        if role_filter == "author" and (is_author or "author" in roles or "assignee" in roles):
+            filtered.append(e)
+        elif role_filter == "reviewer" and not is_author and "reviewer" in roles:
+            filtered.append(e)
+
+    filtered_ids = [e["id"] for e in filtered]
+    count = await db.acknowledge_events(filtered_ids) if filtered_ids else 0
 
     return {
-        "last_synced_at": last_sync,
+        "last_synced_at": previous_sync,
         "events": [
             {
                 "event_type": e["event_type"],
@@ -577,11 +593,39 @@ async def get_pr_updates(since: str | None = None) -> dict:
                 "summary": e["summary"],
                 "priority": e["priority"],
             }
-            for e in events
+            for e in filtered
         ],
-        "total": len(events),
+        "total": len(filtered),
         "acknowledged": count,
     }
+
+
+@mcp.tool()
+async def get_pr_updates(since: str | None = None) -> dict:
+    """Get updates on PRs you authored or are assigned to.
+
+    Returns unacknowledged events (CI changes, reviews received, comments, etc.)
+    sorted by priority. Events caused by you are excluded. After returning,
+    all events are marked as acknowledged.
+
+    Args:
+        since: Not yet used. Reserved for future "since ISO datetime" filtering.
+    """
+    return await _get_updates("author")
+
+
+@mcp.tool()
+async def get_review_updates(since: str | None = None) -> dict:
+    """Get updates on PRs you are reviewing.
+
+    Returns unacknowledged events (new commits pushed, CI changes, comments, etc.)
+    sorted by priority. Events caused by you are excluded. After returning,
+    all events are marked as acknowledged.
+
+    Args:
+        since: Not yet used. Reserved for future "since ISO datetime" filtering.
+    """
+    return await _get_updates("reviewer")
 
 
 @mcp.tool()

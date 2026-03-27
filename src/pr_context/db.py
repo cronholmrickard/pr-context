@@ -269,7 +269,7 @@ class Database:
     async def get_unacknowledged_events(self) -> list[dict]:
         cursor = await self.conn.execute(
             """
-            SELECT e.*, p.repo, p.number as pr_number
+            SELECT e.*, p.repo, p.number as pr_number, p.user_roles, p.author
             FROM pr_events e
             JOIN pull_requests p ON e.pr_id = p.id
             WHERE e.acknowledged = 0
@@ -279,10 +279,17 @@ class Database:
         rows = await cursor.fetchall()
         return [self._row_to_dict(r) for r in rows]
 
-    async def acknowledge_events(self) -> int:
-        cursor = await self.conn.execute(
-            "UPDATE pr_events SET acknowledged = 1 WHERE acknowledged = 0"
-        )
+    async def acknowledge_events(self, event_ids: list[int] | None = None) -> int:
+        if event_ids:
+            placeholders = ",".join("?" for _ in event_ids)
+            cursor = await self.conn.execute(
+                f"UPDATE pr_events SET acknowledged = 1 WHERE id IN ({placeholders})",
+                event_ids,
+            )
+        else:
+            cursor = await self.conn.execute(
+                "UPDATE pr_events SET acknowledged = 1 WHERE acknowledged = 0"
+            )
         await self.conn.commit()
         return cursor.rowcount
 
