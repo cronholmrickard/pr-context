@@ -5,7 +5,14 @@ from datetime import datetime
 
 import httpx
 
-from pr_context.models import CICheck, Comment, PRDetails, PRSummary, Review, ReviewThread
+from pr_context.models import (
+    CICheck,
+    Comment,
+    PRDetails,
+    PRSummary,
+    Review,
+    ReviewThread,
+)
 from pr_context.queries import PR_DETAIL, SEARCH_MY_PRS, VIEWER_LOGIN
 
 logger = logging.getLogger(__name__)
@@ -207,13 +214,15 @@ def _parse_review_threads(pr: dict) -> list[ReviewThread]:
             )
             for c in t.get("comments", {}).get("nodes", [])
         ]
-        threads.append(ReviewThread(
-            is_resolved=t.get("isResolved", False),
-            is_outdated=t.get("isOutdated", False),
-            path=t.get("path"),
-            line=t.get("line"),
-            comments=comments,
-        ))
+        threads.append(
+            ReviewThread(
+                is_resolved=t.get("isResolved", False),
+                is_outdated=t.get("isOutdated", False),
+                path=t.get("path"),
+                line=t.get("line"),
+                comments=comments,
+            )
+        )
     return threads
 
 
@@ -238,21 +247,25 @@ def _parse_ci_checks(pr: dict) -> list[CICheck]:
     checks = []
     for ctx in contexts:
         if "name" in ctx:
-            checks.append(CICheck(
-                name=ctx["name"],
-                status=ctx.get("status", "UNKNOWN"),
-                conclusion=ctx.get("conclusion"),
-                url=ctx.get("detailsUrl"),
-                started_at=ctx.get("startedAt"),
-                completed_at=ctx.get("completedAt"),
-            ))
+            checks.append(
+                CICheck(
+                    name=ctx["name"],
+                    status=ctx.get("status", "UNKNOWN"),
+                    conclusion=ctx.get("conclusion"),
+                    url=ctx.get("detailsUrl"),
+                    started_at=ctx.get("startedAt"),
+                    completed_at=ctx.get("completedAt"),
+                )
+            )
         elif "context" in ctx:
-            checks.append(CICheck(
-                name=ctx["context"],
-                status=ctx.get("state", "UNKNOWN"),
-                conclusion=None,
-                url=ctx.get("targetUrl"),
-                started_at=None,
-                completed_at=None,
-            ))
+            checks.append(
+                CICheck(
+                    name=ctx["context"],
+                    status=ctx.get("state", "UNKNOWN"),
+                    conclusion=None,
+                    url=ctx.get("targetUrl"),
+                    started_at=None,
+                    completed_at=None,
+                )
+            )
     return checks

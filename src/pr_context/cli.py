@@ -25,6 +25,7 @@ def cli():
 @cli.command()
 def check():
     """Sync with GitHub and show new events."""
+
     async def _check():
         settings = get_settings()
         db = Database(settings.db_path)
@@ -54,9 +55,12 @@ def check():
 
 
 @cli.command("list")
-@click.option("--state", default="open", help="Filter by state: open, closed, merged, all")
+@click.option(
+    "--state", default="open", help="Filter by state: open, closed, merged, all"
+)
 def list_prs(state: str):
     """List tracked PRs from local DB."""
+
     async def _list():
         settings = get_settings()
         db = Database(settings.db_path)
@@ -104,6 +108,7 @@ def reset():
 @cli.command()
 def events():
     """Show unacknowledged events."""
+
     async def _events():
         settings = get_settings()
         db = Database(settings.db_path)
@@ -117,7 +122,9 @@ def events():
 
             click.echo(f"{len(unacked)} unacknowledged event(s):\n")
             for e in unacked:
-                priority_label = {0: "low", 1: "normal", 2: "high", 3: "urgent"}.get(e["priority"], "?")
+                priority_label = {0: "low", 1: "normal", 2: "high", 3: "urgent"}.get(
+                    e["priority"], "?"
+                )
                 click.echo(f"  [{priority_label}] {e['summary']}")
                 click.echo(f"    PR: {e['pr_id']}  Type: {e['event_type']}")
                 click.echo()

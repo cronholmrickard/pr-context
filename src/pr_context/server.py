@@ -76,7 +76,9 @@ async def _sync_prs() -> None:
             draft=pr.draft,
             head_branch=pr.head_branch,
             base_branch=pr.base_branch,
-            latest_commit_date=pr.latest_commit_date.isoformat() if pr.latest_commit_date else None,
+            latest_commit_date=(
+                pr.latest_commit_date.isoformat() if pr.latest_commit_date else None
+            ),
             created_at=pr.updated_at.isoformat(),
             updated_at=pr.updated_at.isoformat(),
             snapshot_hash=snapshot_hash,
@@ -192,32 +194,38 @@ async def get_my_prs(state: str = "open", role: str = "author") -> list[dict]:
         if isinstance(pending_reviewers, str):
             pending_reviewers = json.loads(pending_reviewers)
         review_decision = row["review_decision"]
-        results.append({
-            "index": i,
-            "id": row["id"],
-            "repo": row["repo"],
-            "number": row["number"],
-            "title": row["title"],
-            "state": row["state"],
-            "url": row["url"],
-            "author": row["author"],
-            "user_roles": user_roles,
-            "ci_status": row["ci_status"],
-            "review_decision": review_decision,
-            "effective_review_state": _effective_review_state(review_decision, pending_reviewers),
-            "pending_reviewers": pending_reviewers,
-            "mergeable": row.get("mergeable"),
-            "merge_state_status": row.get("merge_state_status"),
-            "unresolved_threads": row.get("unresolved_thread_count", 0),
-            "draft": bool(row["draft"]),
-            "head_branch": row.get("head_branch"),
-            "base_branch": row.get("base_branch"),
-            "updated_at": row["updated_at"],
-            "last_comment": await _get_last_comment(row["id"]),
-        })
+        results.append(
+            {
+                "index": i,
+                "id": row["id"],
+                "repo": row["repo"],
+                "number": row["number"],
+                "title": row["title"],
+                "state": row["state"],
+                "url": row["url"],
+                "author": row["author"],
+                "user_roles": user_roles,
+                "ci_status": row["ci_status"],
+                "review_decision": review_decision,
+                "effective_review_state": _effective_review_state(
+                    review_decision, pending_reviewers
+                ),
+                "pending_reviewers": pending_reviewers,
+                "mergeable": row.get("mergeable"),
+                "merge_state_status": row.get("merge_state_status"),
+                "unresolved_threads": row.get("unresolved_thread_count", 0),
+                "draft": bool(row["draft"]),
+                "head_branch": row.get("head_branch"),
+                "base_branch": row.get("base_branch"),
+                "updated_at": row["updated_at"],
+                "last_comment": await _get_last_comment(row["id"]),
+            }
+        )
 
     # Store index in metadata for persistence
-    await db.set_metadata("pr_index", json.dumps({str(k): v for k, v in _pr_index.items()}))
+    await db.set_metadata(
+        "pr_index", json.dumps({str(k): v for k, v in _pr_index.items()})
+    )
 
     return results
 
@@ -259,45 +267,57 @@ async def get_my_reviews(state: str = "open") -> list[dict]:
             pending_reviewers = json.loads(pending_reviewers)
 
         # Get review context from snapshot
-        your_review, other_reviews, has_new_commits, waiting_since = await _get_review_context(
-            row["id"], row.get("latest_commit_date"), row.get("created_at"),
+        your_review, other_reviews, has_new_commits, waiting_since = (
+            await _get_review_context(
+                row["id"],
+                row.get("latest_commit_date"),
+                row.get("created_at"),
+            )
         )
 
         review_decision = row["review_decision"]
-        results.append({
-            "index": i,
-            "id": row["id"],
-            "repo": row["repo"],
-            "number": row["number"],
-            "title": row["title"],
-            "state": row["state"],
-            "url": row["url"],
-            "author": row["author"],
-            "ci_status": row["ci_status"],
-            "review_decision": review_decision,
-            "effective_review_state": _effective_review_state(review_decision, pending_reviewers),
-            "pending_reviewers": pending_reviewers,
-            "mergeable": row.get("mergeable"),
-            "merge_state_status": row.get("merge_state_status"),
-            "unresolved_threads": row.get("unresolved_thread_count", 0),
-            "draft": bool(row["draft"]),
-            "head_branch": row.get("head_branch"),
-            "base_branch": row.get("base_branch"),
-            "updated_at": row["updated_at"],
-            "last_comment": await _get_last_comment(row["id"]),
-            "your_last_review_at": your_review["at"] if your_review else None,
-            "your_last_review_state": your_review["state"] if your_review else None,
-            "has_new_commits_since_review": has_new_commits,
-            "other_reviewers": other_reviews,
-            "waiting_since": waiting_since,
-        })
+        results.append(
+            {
+                "index": i,
+                "id": row["id"],
+                "repo": row["repo"],
+                "number": row["number"],
+                "title": row["title"],
+                "state": row["state"],
+                "url": row["url"],
+                "author": row["author"],
+                "ci_status": row["ci_status"],
+                "review_decision": review_decision,
+                "effective_review_state": _effective_review_state(
+                    review_decision, pending_reviewers
+                ),
+                "pending_reviewers": pending_reviewers,
+                "mergeable": row.get("mergeable"),
+                "merge_state_status": row.get("merge_state_status"),
+                "unresolved_threads": row.get("unresolved_thread_count", 0),
+                "draft": bool(row["draft"]),
+                "head_branch": row.get("head_branch"),
+                "base_branch": row.get("base_branch"),
+                "updated_at": row["updated_at"],
+                "last_comment": await _get_last_comment(row["id"]),
+                "your_last_review_at": your_review["at"] if your_review else None,
+                "your_last_review_state": your_review["state"] if your_review else None,
+                "has_new_commits_since_review": has_new_commits,
+                "other_reviewers": other_reviews,
+                "waiting_since": waiting_since,
+            }
+        )
 
-    await db.set_metadata("pr_index", json.dumps({str(k): v for k, v in _pr_index.items()}))
+    await db.set_metadata(
+        "pr_index", json.dumps({str(k): v for k, v in _pr_index.items()})
+    )
     return results
 
 
 async def _get_review_context(
-    pr_id: str, latest_commit_date: str | None, created_at: str | None,
+    pr_id: str,
+    latest_commit_date: str | None,
+    created_at: str | None,
 ) -> tuple[dict | None, list[dict], bool | None, str | None]:
     """Extract review context for the current user from snapshot data.
 
@@ -316,12 +336,16 @@ async def _get_review_context(
             submitted_at = r.get("submitted_at")
             state = r.get("state")
             if author.lower() == username.lower():
-                if your_review is None or (submitted_at and submitted_at > (your_review.get("at") or "")):
+                if your_review is None or (
+                    submitted_at and submitted_at > (your_review.get("at") or "")
+                ):
                     your_review = {"at": submitted_at, "state": state}
             else:
                 # Keep latest review per other reviewer
                 existing = other_reviews_map.get(author)
-                if existing is None or (submitted_at and submitted_at > (existing.get("last_at") or "")):
+                if existing is None or (
+                    submitted_at and submitted_at > (existing.get("last_at") or "")
+                ):
                     other_reviews_map[author] = {
                         "login": author,
                         "last_state": state,
@@ -360,7 +384,9 @@ async def get_pr_details(pr_ref: str) -> dict:
 
     resolved = await _resolve_pr_ref(pr_ref)
     if not resolved:
-        return {"error": f"Could not resolve PR reference '{pr_ref}'. Run get_my_prs first to see available PRs."}
+        return {
+            "error": f"Could not resolve PR reference '{pr_ref}'. Run get_my_prs first to see available PRs."
+        }
 
     pr_id, repo, number = resolved
     parts = repo.split("/")
@@ -395,7 +421,9 @@ async def get_pr_threads(pr_ref: str, show_resolved: bool = False) -> dict:
 
     resolved = await _resolve_pr_ref(pr_ref)
     if not resolved:
-        return {"error": f"Could not resolve PR reference '{pr_ref}'. Run get_my_prs first to see available PRs."}
+        return {
+            "error": f"Could not resolve PR reference '{pr_ref}'. Run get_my_prs first to see available PRs."
+        }
 
     pr_id, repo, number = resolved
     parts = repo.split("/")
@@ -409,20 +437,22 @@ async def get_pr_threads(pr_ref: str, show_resolved: bool = False) -> dict:
     for t in details.review_threads:
         if not show_resolved and t.is_resolved:
             continue
-        threads.append({
-            "is_resolved": t.is_resolved,
-            "is_outdated": t.is_outdated,
-            "path": t.path,
-            "line": t.line,
-            "comments": [
-                {
-                    "author": c.author,
-                    "body": c.body,
-                    "created_at": c.created_at.isoformat(),
-                }
-                for c in t.comments
-            ],
-        })
+        threads.append(
+            {
+                "is_resolved": t.is_resolved,
+                "is_outdated": t.is_outdated,
+                "path": t.path,
+                "line": t.line,
+                "comments": [
+                    {
+                        "author": c.author,
+                        "body": c.body,
+                        "created_at": c.created_at.isoformat(),
+                    }
+                    for c in t.comments
+                ],
+            }
+        )
 
     total = len(details.review_threads)
     unresolved = sum(1 for t in details.review_threads if not t.is_resolved)
@@ -451,7 +481,9 @@ async def get_pr_comments(pr_ref: str) -> dict:
 
     resolved = await _resolve_pr_ref(pr_ref)
     if not resolved:
-        return {"error": f"Could not resolve PR reference '{pr_ref}'. Run get_my_prs first to see available PRs."}
+        return {
+            "error": f"Could not resolve PR reference '{pr_ref}'. Run get_my_prs first to see available PRs."
+        }
 
     pr_id, repo, number = resolved
     parts = repo.split("/")
@@ -501,7 +533,9 @@ async def get_pr_ci(pr_ref: str) -> dict:
 
     resolved = await _resolve_pr_ref(pr_ref)
     if not resolved:
-        return {"error": f"Could not resolve PR reference '{pr_ref}'. Run get_my_prs first to see available PRs."}
+        return {
+            "error": f"Could not resolve PR reference '{pr_ref}'. Run get_my_prs first to see available PRs."
+        }
 
     pr_id, repo, number = resolved
     parts = repo.split("/")
@@ -528,9 +562,13 @@ async def get_pr_ci(pr_ref: str) -> dict:
 
     # Summarize
     total = len(checks)
-    passed = sum(1 for c in checks if c.get("conclusion") in ("SUCCESS", "NEUTRAL", "SKIPPED"))
+    passed = sum(
+        1 for c in checks if c.get("conclusion") in ("SUCCESS", "NEUTRAL", "SKIPPED")
+    )
     failed = sum(1 for c in checks if c.get("conclusion") == "FAILURE")
-    pending = sum(1 for c in checks if c.get("status") in ("IN_PROGRESS", "QUEUED", "PENDING"))
+    pending = sum(
+        1 for c in checks if c.get("status") in ("IN_PROGRESS", "QUEUED", "PENDING")
+    )
 
     return {
         "pr_id": pr_id,
@@ -571,9 +609,15 @@ async def _get_updates(role_filter: str) -> dict:
 
     filtered = []
     for e in all_events:
-        roles = json.loads(e.get("user_roles", "[]")) if isinstance(e.get("user_roles"), str) else e.get("user_roles", [])
+        roles = (
+            json.loads(e.get("user_roles", "[]"))
+            if isinstance(e.get("user_roles"), str)
+            else e.get("user_roles", [])
+        )
         is_author = e.get("author", "").lower() == username.lower()
-        if role_filter == "author" and (is_author or "author" in roles or "assignee" in roles):
+        if role_filter == "author" and (
+            is_author or "author" in roles or "assignee" in roles
+        ):
             filtered.append(e)
         elif role_filter == "reviewer" and not is_author and "reviewer" in roles:
             filtered.append(e)
@@ -658,140 +702,170 @@ async def get_my_action_items() -> list[dict]:
         pending_reviewers = row.get("pending_reviewers", "[]")
         if isinstance(pending_reviewers, str):
             pending_reviewers = json.loads(pending_reviewers)
-        effective_state = _effective_review_state(row.get("review_decision"), pending_reviewers)
+        effective_state = _effective_review_state(
+            row.get("review_decision"), pending_reviewers
+        )
 
         # --- Author action items ---
 
         # Authored PR with failing CI
         if is_author and row.get("ci_status") == "FAILURE":
-            items.append({
-                "section": "as_author",
-                "action_type": "ci_failing",
-                "pr_id": row["id"],
-                "pr_number": row["number"],
-                "repo": row["repo"],
-                "title": row["title"],
-                "url": row["url"],
-                "reason": "CI is failing on your PR",
-                "priority": 3,
-            })
+            items.append(
+                {
+                    "section": "as_author",
+                    "action_type": "ci_failing",
+                    "pr_id": row["id"],
+                    "pr_number": row["number"],
+                    "repo": row["repo"],
+                    "title": row["title"],
+                    "url": row["url"],
+                    "reason": "CI is failing on your PR",
+                    "priority": 3,
+                }
+            )
 
         # Authored PR with changes requested (but NOT if re-review was requested)
         if is_author and effective_state == "CHANGES_REQUESTED":
-            items.append({
-                "section": "as_author",
-                "action_type": "changes_requested",
-                "pr_id": row["id"],
-                "pr_number": row["number"],
-                "repo": row["repo"],
-                "title": row["title"],
-                "url": row["url"],
-                "reason": "Changes were requested on your PR",
-                "priority": 3,
-            })
+            items.append(
+                {
+                    "section": "as_author",
+                    "action_type": "changes_requested",
+                    "pr_id": row["id"],
+                    "pr_number": row["number"],
+                    "repo": row["repo"],
+                    "title": row["title"],
+                    "url": row["url"],
+                    "reason": "Changes were requested on your PR",
+                    "priority": 3,
+                }
+            )
 
         # Authored PR where re-review was requested (lower priority — waiting on reviewer)
         if is_author and effective_state == "RE_REVIEW_REQUESTED":
-            items.append({
-                "section": "as_author",
-                "action_type": "re_review_requested",
-                "pr_id": row["id"],
-                "pr_number": row["number"],
-                "repo": row["repo"],
-                "title": row["title"],
-                "url": row["url"],
-                "reason": f"Waiting for re-review from {', '.join(pending_reviewers)}",
-                "priority": 1,
-            })
+            items.append(
+                {
+                    "section": "as_author",
+                    "action_type": "re_review_requested",
+                    "pr_id": row["id"],
+                    "pr_number": row["number"],
+                    "repo": row["repo"],
+                    "title": row["title"],
+                    "url": row["url"],
+                    "reason": f"Waiting for re-review from {', '.join(pending_reviewers)}",
+                    "priority": 1,
+                }
+            )
 
         # Merge conflicts
         if is_author and row.get("mergeable") == "CONFLICTING":
-            items.append({
-                "section": "as_author",
-                "action_type": "merge_conflict",
-                "pr_id": row["id"],
-                "pr_number": row["number"],
-                "repo": row["repo"],
-                "title": row["title"],
-                "url": row["url"],
-                "reason": "PR has merge conflicts",
-                "priority": 2,
-            })
+            items.append(
+                {
+                    "section": "as_author",
+                    "action_type": "merge_conflict",
+                    "pr_id": row["id"],
+                    "pr_number": row["number"],
+                    "repo": row["repo"],
+                    "title": row["title"],
+                    "url": row["url"],
+                    "reason": "PR has merge conflicts",
+                    "priority": 2,
+                }
+            )
 
         # Branch behind base
         if is_author and row.get("merge_state_status") == "BEHIND":
-            items.append({
-                "section": "as_author",
-                "action_type": "branch_behind",
-                "pr_id": row["id"],
-                "pr_number": row["number"],
-                "repo": row["repo"],
-                "title": row["title"],
-                "url": row["url"],
-                "reason": "Branch is behind base — needs update",
-                "priority": 1,
-            })
+            items.append(
+                {
+                    "section": "as_author",
+                    "action_type": "branch_behind",
+                    "pr_id": row["id"],
+                    "pr_number": row["number"],
+                    "repo": row["repo"],
+                    "title": row["title"],
+                    "url": row["url"],
+                    "reason": "Branch is behind base — needs update",
+                    "priority": 1,
+                }
+            )
 
         # Unresolved review threads
         unresolved = row.get("unresolved_thread_count", 0)
         if is_author and unresolved > 0:
-            items.append({
-                "section": "as_author",
-                "action_type": "unresolved_threads",
-                "pr_id": row["id"],
-                "pr_number": row["number"],
-                "repo": row["repo"],
-                "title": row["title"],
-                "url": row["url"],
-                "reason": f"{unresolved} unresolved review thread{'s' if unresolved != 1 else ''}",
-                "priority": 2,
-            })
+            items.append(
+                {
+                    "section": "as_author",
+                    "action_type": "unresolved_threads",
+                    "pr_id": row["id"],
+                    "pr_number": row["number"],
+                    "repo": row["repo"],
+                    "title": row["title"],
+                    "url": row["url"],
+                    "reason": f"{unresolved} unresolved review thread{'s' if unresolved != 1 else ''}",
+                    "priority": 2,
+                }
+            )
 
         # --- Reviewer action items ---
 
-        if is_reviewer and username and username.lower() in [r.lower() for r in pending_reviewers]:
+        if (
+            is_reviewer
+            and username
+            and username.lower() in [r.lower() for r in pending_reviewers]
+        ):
             # Check for new commits since last review
             your_review, _, has_new_commits, _ = await _get_review_context(
-                row["id"], row.get("latest_commit_date"), row.get("created_at"),
+                row["id"],
+                row.get("latest_commit_date"),
+                row.get("created_at"),
             )
             suffix = " (new commits since your last review)" if has_new_commits else ""
-            reason = "Re-review requested" + suffix if effective_state == "RE_REVIEW_REQUESTED" else "Your review is requested" + suffix
-            items.append({
-                "section": "as_reviewer",
-                "action_type": "needs_review",
-                "pr_id": row["id"],
-                "pr_number": row["number"],
-                "repo": row["repo"],
-                "title": row["title"],
-                "url": row["url"],
-                "reason": reason,
-                "priority": 2,
-            })
+            reason = (
+                "Re-review requested" + suffix
+                if effective_state == "RE_REVIEW_REQUESTED"
+                else "Your review is requested" + suffix
+            )
+            items.append(
+                {
+                    "section": "as_reviewer",
+                    "action_type": "needs_review",
+                    "pr_id": row["id"],
+                    "pr_number": row["number"],
+                    "repo": row["repo"],
+                    "title": row["title"],
+                    "url": row["url"],
+                    "reason": reason,
+                    "priority": 2,
+                }
+            )
         elif is_reviewer and row.get("review_decision") == "REVIEW_REQUIRED":
-            items.append({
-                "section": "as_reviewer",
-                "action_type": "needs_review",
-                "pr_id": row["id"],
-                "pr_number": row["number"],
-                "repo": row["repo"],
-                "title": row["title"],
-                "url": row["url"],
-                "reason": "Your review is requested",
-                "priority": 2,
-            })
+            items.append(
+                {
+                    "section": "as_reviewer",
+                    "action_type": "needs_review",
+                    "pr_id": row["id"],
+                    "pr_number": row["number"],
+                    "repo": row["repo"],
+                    "title": row["title"],
+                    "url": row["url"],
+                    "reason": "Your review is requested",
+                    "priority": 2,
+                }
+            )
 
     # Add high-priority unacknowledged events
     for e in unacked:
         if e["priority"] >= 2:
-            items.append({
-                "action_type": "unread_event",
-                "pr_id": e["pr_id"],
-                "pr_number": e["pr_number"],
-                "repo": e["repo"],
-                "title": e["summary"],
-                "reason": e["summary"],
-                "priority": e["priority"],
-            })
+            items.append(
+                {
+                    "action_type": "unread_event",
+                    "pr_id": e["pr_id"],
+                    "pr_number": e["pr_number"],
+                    "repo": e["repo"],
+                    "title": e["summary"],
+                    "reason": e["summary"],
+                    "priority": e["priority"],
+                }
+            )
 
     # Sort by priority descending
     items.sort(key=lambda x: x["priority"], reverse=True)
@@ -869,7 +943,9 @@ async def summarize_my_work_context() -> dict:
     }
 
 
-def _effective_review_state(review_decision: str | None, pending_reviewers: list[str]) -> str:
+def _effective_review_state(
+    review_decision: str | None, pending_reviewers: list[str]
+) -> str:
     """Compute a more accurate review state from GitHub's reviewDecision + pending requests.
 
     - CHANGES_REQUESTED with pending reviewers = re-review requested (author addressed feedback)

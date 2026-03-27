@@ -47,7 +47,9 @@ class PRSummary(BaseModel):
     ci_status: str | None
     review_decision: str | None
     mergeable: str | None  # MERGEABLE, CONFLICTING, UNKNOWN
-    merge_state_status: str | None = None  # BEHIND, BLOCKED, CLEAN, DIRTY, DRAFT, HAS_HOOKS, UNKNOWN, UNSTABLE
+    merge_state_status: str | None = (
+        None  # BEHIND, BLOCKED, CLEAN, DIRTY, DRAFT, HAS_HOOKS, UNKNOWN, UNSTABLE
+    )
     unresolved_thread_count: int
     pending_reviewers: list[str] = []
     draft: bool
@@ -72,7 +74,9 @@ class PRDetails(BaseModel):
     ci_checks: list[CICheck]
     review_decision: str | None
     mergeable: str | None  # MERGEABLE, CONFLICTING, UNKNOWN
-    merge_state_status: str | None = None  # BEHIND, BLOCKED, CLEAN, DIRTY, DRAFT, HAS_HOOKS, UNKNOWN, UNSTABLE
+    merge_state_status: str | None = (
+        None  # BEHIND, BLOCKED, CLEAN, DIRTY, DRAFT, HAS_HOOKS, UNKNOWN, UNSTABLE
+    )
     unresolved_thread_count: int
     draft: bool
     head_branch: str | None = None

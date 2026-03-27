@@ -161,12 +161,28 @@ class Database:
                 snapshot_hash=excluded.snapshot_hash, last_synced_at=excluded.last_synced_at
             """,
             (
-                id, repo, number, title, state, url, author,
-                json.dumps(user_roles), ci_status, review_decision,
-                mergeable, merge_state_status, unresolved_thread_count,
+                id,
+                repo,
+                number,
+                title,
+                state,
+                url,
+                author,
+                json.dumps(user_roles),
+                ci_status,
+                review_decision,
+                mergeable,
+                merge_state_status,
+                unresolved_thread_count,
                 json.dumps(pending_reviewers or []),
-                int(draft), head_branch, base_branch, latest_commit_date,
-                created_at, updated_at, snapshot_hash, now,
+                int(draft),
+                head_branch,
+                base_branch,
+                latest_commit_date,
+                created_at,
+                updated_at,
+                snapshot_hash,
+                now,
             ),
         )
         await self.conn.commit()
@@ -262,7 +278,14 @@ class Database:
             INSERT INTO pr_events (pr_id, event_type, actor, summary, priority, data_json)
             VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (pr_id, event_type, actor, summary, priority, json.dumps(data) if data else None),
+            (
+                pr_id,
+                event_type,
+                actor,
+                summary,
+                priority,
+                json.dumps(data) if data else None,
+            ),
         )
         await self.conn.commit()
 

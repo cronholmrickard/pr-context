@@ -11,6 +11,7 @@ Local-first MCP server that tracks GitHub PRs and exposes high-signal developer 
 - **httpx** for async GitHub GraphQL API calls
 - **pydantic-settings** for configuration
 - **click** for debug CLI
+- **black** for code formatting (pre-commit hook)
 - Runs in **Docker** with docker-compose (single container + named volume for DB)
 
 ### Architecture
@@ -64,6 +65,9 @@ pip install -e ".[dev]"
 
 # Run MCP server directly
 python -m pr_context
+
+# Format code
+black src/ tests/
 
 # Run tests
 pytest tests/

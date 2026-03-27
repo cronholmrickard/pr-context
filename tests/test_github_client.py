@@ -42,7 +42,7 @@ def _make_pr_node(
                 {
                     "commit": {
                         "committedDate": "2024-01-14T10:00:00Z",
-                        "statusCheckRollup": {"state": ci_state} if ci_state else None
+                        "statusCheckRollup": {"state": ci_state} if ci_state else None,
                     }
                 }
             ]
@@ -91,7 +91,11 @@ def test_parse_pr_summary_branch_info():
 
 class TestExtractLatestCommitDate:
     def test_with_commit(self):
-        node = {"commits": {"nodes": [{"commit": {"committedDate": "2024-01-15T10:00:00Z"}}]}}
+        node = {
+            "commits": {
+                "nodes": [{"commit": {"committedDate": "2024-01-15T10:00:00Z"}}]
+            }
+        }
         assert _extract_latest_commit_date(node) == "2024-01-15T10:00:00Z"
 
     def test_no_commits(self):
@@ -108,55 +112,81 @@ class TestExtractPendingReviewers:
         assert _extract_pending_reviewers(node) == []
 
     def test_user_reviewer(self):
-        node = {"reviewRequests": {"nodes": [
-            {"requestedReviewer": {"login": "bob"}},
-        ]}}
+        node = {
+            "reviewRequests": {
+                "nodes": [
+                    {"requestedReviewer": {"login": "bob"}},
+                ]
+            }
+        }
         assert _extract_pending_reviewers(node) == ["bob"]
 
     def test_team_reviewer(self):
-        node = {"reviewRequests": {"nodes": [
-            {"requestedReviewer": {"name": "backend-team"}},
-        ]}}
+        node = {
+            "reviewRequests": {
+                "nodes": [
+                    {"requestedReviewer": {"name": "backend-team"}},
+                ]
+            }
+        }
         assert _extract_pending_reviewers(node) == ["backend-team"]
 
     def test_mixed_reviewers(self):
-        node = {"reviewRequests": {"nodes": [
-            {"requestedReviewer": {"login": "alice"}},
-            {"requestedReviewer": {"name": "frontend-team"}},
-        ]}}
+        node = {
+            "reviewRequests": {
+                "nodes": [
+                    {"requestedReviewer": {"login": "alice"}},
+                    {"requestedReviewer": {"name": "frontend-team"}},
+                ]
+            }
+        }
         assert _extract_pending_reviewers(node) == ["alice", "frontend-team"]
 
     def test_null_reviewer(self):
-        node = {"reviewRequests": {"nodes": [
-            {"requestedReviewer": None},
-        ]}}
+        node = {
+            "reviewRequests": {
+                "nodes": [
+                    {"requestedReviewer": None},
+                ]
+            }
+        }
         assert _extract_pending_reviewers(node) == []
 
 
 class TestParseCIChecks:
     def test_parse_check_run_with_details(self):
         pr = {
-            "commits": {"nodes": [{"commit": {"statusCheckRollup": {
-                "state": "FAILURE",
-                "contexts": {"nodes": [
+            "commits": {
+                "nodes": [
                     {
-                        "name": "build",
-                        "status": "COMPLETED",
-                        "conclusion": "SUCCESS",
-                        "detailsUrl": "https://github.com/org/repo/actions/runs/123",
-                        "startedAt": "2024-01-15T10:00:00Z",
-                        "completedAt": "2024-01-15T10:05:00Z",
-                    },
-                    {
-                        "name": "test",
-                        "status": "COMPLETED",
-                        "conclusion": "FAILURE",
-                        "detailsUrl": "https://github.com/org/repo/actions/runs/124",
-                        "startedAt": "2024-01-15T10:00:00Z",
-                        "completedAt": "2024-01-15T10:03:00Z",
-                    },
-                ]},
-            }}}]},
+                        "commit": {
+                            "statusCheckRollup": {
+                                "state": "FAILURE",
+                                "contexts": {
+                                    "nodes": [
+                                        {
+                                            "name": "build",
+                                            "status": "COMPLETED",
+                                            "conclusion": "SUCCESS",
+                                            "detailsUrl": "https://github.com/org/repo/actions/runs/123",
+                                            "startedAt": "2024-01-15T10:00:00Z",
+                                            "completedAt": "2024-01-15T10:05:00Z",
+                                        },
+                                        {
+                                            "name": "test",
+                                            "status": "COMPLETED",
+                                            "conclusion": "FAILURE",
+                                            "detailsUrl": "https://github.com/org/repo/actions/runs/124",
+                                            "startedAt": "2024-01-15T10:00:00Z",
+                                            "completedAt": "2024-01-15T10:03:00Z",
+                                        },
+                                    ]
+                                },
+                            }
+                        }
+                    }
+                ]
+            },
         }
         checks = _parse_ci_checks(pr)
         assert len(checks) == 2
@@ -168,16 +198,26 @@ class TestParseCIChecks:
 
     def test_parse_status_context_with_url(self):
         pr = {
-            "commits": {"nodes": [{"commit": {"statusCheckRollup": {
-                "state": "SUCCESS",
-                "contexts": {"nodes": [
+            "commits": {
+                "nodes": [
                     {
-                        "context": "ci/circleci",
-                        "state": "SUCCESS",
-                        "targetUrl": "https://circleci.com/build/123",
-                    },
-                ]},
-            }}}]},
+                        "commit": {
+                            "statusCheckRollup": {
+                                "state": "SUCCESS",
+                                "contexts": {
+                                    "nodes": [
+                                        {
+                                            "context": "ci/circleci",
+                                            "state": "SUCCESS",
+                                            "targetUrl": "https://circleci.com/build/123",
+                                        },
+                                    ]
+                                },
+                            }
+                        }
+                    }
+                ]
+            },
         }
         checks = _parse_ci_checks(pr)
         assert len(checks) == 1
@@ -212,18 +252,22 @@ class TestGitHubClientFetchMyPrs:
     async def test_fetch_deduplicates_and_assigns_roles(self, client, mock_transport):
         pr_node = _make_pr_node(number=10, repo="org/app", author="testuser")
 
-        mock_transport.add_response({
-            "data": {
-                "viewer": {"login": "testuser"},
+        mock_transport.add_response(
+            {
+                "data": {
+                    "viewer": {"login": "testuser"},
+                }
             }
-        })
-        mock_transport.add_response({
-            "data": {
-                "authored": {"nodes": [pr_node]},
-                "reviewing": {"nodes": [pr_node]},
-                "assigned": {"nodes": []},
+        )
+        mock_transport.add_response(
+            {
+                "data": {
+                    "authored": {"nodes": [pr_node]},
+                    "reviewing": {"nodes": [pr_node]},
+                    "assigned": {"nodes": []},
+                }
             }
-        })
+        )
 
         prs = await client.fetch_my_prs()
         assert len(prs) == 1
@@ -232,16 +276,18 @@ class TestGitHubClientFetchMyPrs:
         await client.close()
 
     async def test_fetch_multiple_prs(self, client, mock_transport):
-        mock_transport.add_response({
-            "data": {"viewer": {"login": "testuser"}}
-        })
-        mock_transport.add_response({
-            "data": {
-                "authored": {"nodes": [_make_pr_node(number=1)]},
-                "reviewing": {"nodes": [_make_pr_node(number=2, repo="other/repo")]},
-                "assigned": {"nodes": [_make_pr_node(number=3)]},
+        mock_transport.add_response({"data": {"viewer": {"login": "testuser"}}})
+        mock_transport.add_response(
+            {
+                "data": {
+                    "authored": {"nodes": [_make_pr_node(number=1)]},
+                    "reviewing": {
+                        "nodes": [_make_pr_node(number=2, repo="other/repo")]
+                    },
+                    "assigned": {"nodes": [_make_pr_node(number=3)]},
+                }
             }
-        })
+        )
 
         prs = await client.fetch_my_prs()
         assert len(prs) == 3

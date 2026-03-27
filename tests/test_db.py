@@ -101,17 +101,29 @@ async def test_get_all_prs_with_state_filter(db: Database):
 async def test_snapshot_round_trip(db: Database):
     # Need a PR first for the FK
     await db.upsert_pr(
-        id="org/repo#1", repo="org/repo", number=1, title="T", state="OPEN",
-        url="u", author="a", user_roles=[], ci_status=None, review_decision=None,
-        draft=False, created_at="2024-01-01T00:00:00Z",
-        updated_at="2024-01-01T00:00:00Z", snapshot_hash="h",
+        id="org/repo#1",
+        repo="org/repo",
+        number=1,
+        title="T",
+        state="OPEN",
+        url="u",
+        author="a",
+        user_roles=[],
+        ci_status=None,
+        review_decision=None,
+        draft=False,
+        created_at="2024-01-01T00:00:00Z",
+        updated_at="2024-01-01T00:00:00Z",
+        snapshot_hash="h",
     )
 
     comments = [{"author": "bob", "body": "LGTM"}]
     reviews = [{"author": "bob", "state": "APPROVED"}]
     checks = [{"name": "ci", "status": "COMPLETED", "conclusion": "SUCCESS"}]
 
-    await db.upsert_snapshot("org/repo#1", comments=comments, reviews=reviews, checks=checks)
+    await db.upsert_snapshot(
+        "org/repo#1", comments=comments, reviews=reviews, checks=checks
+    )
 
     snap = await db.get_snapshot("org/repo#1")
     assert snap is not None
@@ -122,10 +134,20 @@ async def test_snapshot_round_trip(db: Database):
 
 async def test_events_lifecycle(db: Database):
     await db.upsert_pr(
-        id="org/repo#1", repo="org/repo", number=1, title="T", state="OPEN",
-        url="u", author="a", user_roles=[], ci_status=None, review_decision=None,
-        draft=False, created_at="2024-01-01T00:00:00Z",
-        updated_at="2024-01-01T00:00:00Z", snapshot_hash="h",
+        id="org/repo#1",
+        repo="org/repo",
+        number=1,
+        title="T",
+        state="OPEN",
+        url="u",
+        author="a",
+        user_roles=[],
+        ci_status=None,
+        review_decision=None,
+        draft=False,
+        created_at="2024-01-01T00:00:00Z",
+        updated_at="2024-01-01T00:00:00Z",
+        snapshot_hash="h",
     )
 
     await db.add_event(

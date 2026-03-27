@@ -51,7 +51,9 @@ async def sync_and_detect(
             draft=pr.draft,
             head_branch=pr.head_branch,
             base_branch=pr.base_branch,
-            latest_commit_date=pr.latest_commit_date.isoformat() if pr.latest_commit_date else None,
+            latest_commit_date=(
+                pr.latest_commit_date.isoformat() if pr.latest_commit_date else None
+            ),
             created_at=pr.updated_at.isoformat(),
             updated_at=pr.updated_at.isoformat(),
             snapshot_hash=new_hash,
@@ -118,21 +120,25 @@ async def _diff_pr(
         new_ci = pr.ci_status
         if old_ci != new_ci and new_ci is not None:
             if new_ci == "FAILURE" and is_author:
-                events.append(_make_event(
-                    pr_id=pr.id,
-                    event_type="ci_failed",
-                    actor=None,
-                    summary=f"CI failed on your PR: {pr.title}",
-                    priority=3,
-                ))
+                events.append(
+                    _make_event(
+                        pr_id=pr.id,
+                        event_type="ci_failed",
+                        actor=None,
+                        summary=f"CI failed on your PR: {pr.title}",
+                        priority=3,
+                    )
+                )
             elif new_ci == "SUCCESS" and old_ci == "FAILURE":
-                events.append(_make_event(
-                    pr_id=pr.id,
-                    event_type="ci_recovered",
-                    actor=None,
-                    summary=f"CI recovered to green: {pr.title}",
-                    priority=0,
-                ))
+                events.append(
+                    _make_event(
+                        pr_id=pr.id,
+                        event_type="ci_recovered",
+                        actor=None,
+                        summary=f"CI recovered to green: {pr.title}",
+                        priority=0,
+                    )
+                )
 
     # Review decision change
     if old_pr:
@@ -140,77 +146,95 @@ async def _diff_pr(
         new_decision = pr.review_decision
         if old_decision != new_decision and new_decision is not None:
             if new_decision == "CHANGES_REQUESTED" and is_author:
-                events.append(_make_event(
-                    pr_id=pr.id,
-                    event_type="changes_requested",
-                    actor=None,
-                    summary=f"Changes requested on your PR: {pr.title}",
-                    priority=3,
-                ))
+                events.append(
+                    _make_event(
+                        pr_id=pr.id,
+                        event_type="changes_requested",
+                        actor=None,
+                        summary=f"Changes requested on your PR: {pr.title}",
+                        priority=3,
+                    )
+                )
             elif new_decision == "APPROVED" and is_author:
-                events.append(_make_event(
-                    pr_id=pr.id,
-                    event_type="pr_approved",
-                    actor=None,
-                    summary=f"Your PR was approved: {pr.title}",
-                    priority=2,
-                ))
+                events.append(
+                    _make_event(
+                        pr_id=pr.id,
+                        event_type="pr_approved",
+                        actor=None,
+                        summary=f"Your PR was approved: {pr.title}",
+                        priority=2,
+                    )
+                )
 
     # New commits pushed (relevant for reviewers)
     is_reviewer = "reviewer" in pr.user_roles
     if old_pr and is_reviewer and not is_author:
         old_commit_date = old_pr.get("latest_commit_date")
-        new_commit_date = pr.latest_commit_date.isoformat() if pr.latest_commit_date else None
+        new_commit_date = (
+            pr.latest_commit_date.isoformat() if pr.latest_commit_date else None
+        )
         if old_commit_date and new_commit_date and new_commit_date != old_commit_date:
-            events.append(_make_event(
-                pr_id=pr.id,
-                event_type="new_commits_pushed",
-                actor=pr.author,
-                summary=f"New commits pushed to {pr.title} — may need re-review",
-                priority=2,
-            ))
+            events.append(
+                _make_event(
+                    pr_id=pr.id,
+                    event_type="new_commits_pushed",
+                    actor=pr.author,
+                    summary=f"New commits pushed to {pr.title} — may need re-review",
+                    priority=2,
+                )
+            )
 
     # Draft status change
     if old_pr and bool(old_pr.get("draft")) != pr.draft:
-        events.append(_make_event(
-            pr_id=pr.id,
-            event_type="draft_changed",
-            actor=None,
-            summary=f"PR {'marked as draft' if pr.draft else 'marked ready for review'}: {pr.title}",
-            priority=0,
-        ))
+        events.append(
+            _make_event(
+                pr_id=pr.id,
+                event_type="draft_changed",
+                actor=None,
+                summary=f"PR {'marked as draft' if pr.draft else 'marked ready for review'}: {pr.title}",
+                priority=0,
+            )
+        )
 
     if not old_snapshot:
         return _filter_own_events(events, username)
 
     # New comments
     old_comments = old_snapshot.get("comments", [])
-    old_comment_set = {(c.get("author"), c.get("body"), c.get("created_at")) for c in old_comments}
+    old_comment_set = {
+        (c.get("author"), c.get("body"), c.get("created_at")) for c in old_comments
+    }
     for comment in details.comments:
         key = (comment.author, comment.body, comment.created_at.isoformat())
         if key not in old_comment_set:
-            events.append(_make_event(
-                pr_id=pr.id,
-                event_type="new_comment",
-                actor=comment.author,
-                summary=f"{comment.author} commented on {pr.title}: {_truncate(comment.body)}",
-                priority=1,
-            ))
+            events.append(
+                _make_event(
+                    pr_id=pr.id,
+                    event_type="new_comment",
+                    actor=comment.author,
+                    summary=f"{comment.author} commented on {pr.title}: {_truncate(comment.body)}",
+                    priority=1,
+                )
+            )
 
     # New reviews
     old_reviews = old_snapshot.get("reviews", [])
-    old_review_set = {(r.get("author"), r.get("state"), r.get("submitted_at")) for r in old_reviews}
+    old_review_set = {
+        (r.get("author"), r.get("state"), r.get("submitted_at")) for r in old_reviews
+    }
     for review in details.reviews:
         key = (review.author, review.state, review.submitted_at.isoformat())
         if key not in old_review_set:
             priority = 2 if is_author else 1
-            events.append(_make_event(
-                pr_id=pr.id,
-                event_type="new_review",
-                actor=review.author,
-                summary=f"{review.author} reviewed {pr.title}: {review.state}",
-                priority=priority,
-            ))
+            events.append(
+                _make_event(
+                    pr_id=pr.id,
+                    event_type="new_review",
+                    actor=review.author,
+                    summary=f"{review.author} reviewed {pr.title}: {review.state}",
+                    priority=priority,
+                )
+            )
 
     return _filter_own_events(events, username)
 
@@ -218,7 +242,8 @@ async def _diff_pr(
 def _filter_own_events(events: list[dict], username: str) -> list[dict]:
     """Filter out events caused by the user themselves."""
     return [
-        e for e in events
+        e
+        for e in events
         if e.get("actor") is None or e["actor"].lower() != username.lower()
     ]
 

@@ -23,6 +23,8 @@ pr-context = "pr_context.cli:cli"
 dev = [
     "pytest",
     "pytest-asyncio",
+    "black",
+    "pre-commit",
 ]
 
 [tool.hatch.build.targets.wheel]
