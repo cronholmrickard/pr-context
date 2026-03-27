@@ -20,7 +20,6 @@ class GitHubClientError(Exception):
 class GitHubClient:
     def __init__(self, token: str) -> None:
         self._client = httpx.AsyncClient(
-            base_url=GITHUB_GRAPHQL_URL,
             headers={
                 "Authorization": f"bearer {token}",
                 "Content-Type": "application/json",
@@ -37,7 +36,7 @@ class GitHubClient:
         if variables:
             payload["variables"] = variables
 
-        resp = await self._client.post("", json=payload)
+        resp = await self._client.post(GITHUB_GRAPHQL_URL, json=payload)
         resp.raise_for_status()
         data = resp.json()
 

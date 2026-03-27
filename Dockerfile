@@ -11,4 +11,4 @@ ENV DB_PATH=/data/pr_context.db
 
 VOLUME /data
 
-ENTRYPOINT ["python", "-m", "pr_context.server"]
+ENTRYPOINT ["python", "-m", "pr_context"]

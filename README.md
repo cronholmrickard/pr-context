@@ -5,7 +5,7 @@ Local-first MCP server that tracks GitHub PRs and exposes high-signal developer 
 ## Stack
 
 - Python 3.12, async throughout
-- FastMCP (official MCP Python SDK) with stdio transport
+- FastMCP (official MCP Python SDK) with SSE transport
 - SQLite via aiosqlite for local state
 - GitHub GraphQL API (batched queries)
 - Docker for deployment
@@ -13,23 +13,39 @@ Local-first MCP server that tracks GitHub PRs and exposes high-signal developer 
 ## Setup
 
 ```bash
-# Install dependencies
-pip install -e ".[dev]"
+# Ensure gh has the required scopes
+gh auth refresh -s read:org,repo
 
-# Configure
-cp .env.example .env
-# Edit .env with your GitHub token
+# Generate .env from gh token
+echo "GITHUB_TOKEN=$(gh auth token)" > .env
+
+# Build and start the server
+docker compose build
+docker compose up -d
 ```
 
-## Usage
+The server runs on `http://localhost:8321` with SSE transport. Data is persisted in a Docker named volume (`pr-data`).
+
+## Claude Code Configuration
+
+Add the MCP server to Claude Code:
 
 ```bash
-# Run MCP server (stdio transport)
-python -m pr_context.server
+claude mcp add --transport sse --scope user pr-context http://localhost:8321/sse
+```
 
-# Docker
-docker compose build
-docker compose run --rm -i pr-context
+Note: The MCP server will only be available in new Claude Code sessions. Already running sessions will not pick it up.
+
+## Local Development
+
+```bash
+# Install dependencies
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+
+# Run MCP server locally (stdio transport)
+python -m pr_context
 
 # Run tests
 pytest tests/
@@ -52,19 +68,6 @@ pr-context events
 pr-context reset
 ```
 
-## Claude Desktop / CLI Configuration
-
-```json
-{
-  "mcpServers": {
-    "pr-context": {
-      "command": "docker",
-      "args": ["compose", "-f", "/path/to/pr-context/docker-compose.yml", "run", "--rm", "-i", "pr-context"]
-    }
-  }
-}
-```
-
 ## Configuration
 
 | Variable | Required | Default | Description |
@@ -72,6 +75,8 @@ pr-context reset
 | `GITHUB_TOKEN` | Yes | — | GitHub Personal Access Token |
 | `DB_PATH` | No | `./data/pr_context.db` | SQLite database path |
 | `LOG_LEVEL` | No | `INFO` | Logging level |
+| `TRANSPORT` | No | `stdio` | Transport: `stdio` or `sse` |
+| `PORT` | No | `8321` | Port for SSE transport |
 
 Username is auto-detected from the GitHub token via `viewer { login }`.
 
