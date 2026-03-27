@@ -250,6 +250,9 @@ async def get_my_reviews(state: str = "open") -> list[dict]:
 
         if "reviewer" not in user_roles:
             continue
+        # Exclude PRs you authored — those belong in get_my_prs
+        if "author" in user_roles or "assignee" in user_roles:
+            continue
 
         pending_reviewers = row.get("pending_reviewers", "[]")
         if isinstance(pending_reviewers, str):
