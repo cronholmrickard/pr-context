@@ -6,7 +6,7 @@ from pathlib import Path
 
 import aiosqlite
 
-SCHEMA_VERSION = "2"
+SCHEMA_VERSION = "6"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS pull_requests (
@@ -21,7 +21,9 @@ CREATE TABLE IF NOT EXISTS pull_requests (
     ci_status TEXT,
     review_decision TEXT,
     mergeable TEXT,
+    merge_state_status TEXT,
     unresolved_thread_count INTEGER DEFAULT 0,
+    pending_reviewers TEXT DEFAULT '[]',
     draft INTEGER DEFAULT 0,
     created_at TEXT,
     updated_at TEXT,
@@ -122,7 +124,9 @@ class Database:
         ci_status: str | None,
         review_decision: str | None,
         mergeable: str | None = None,
+        merge_state_status: str | None = None,
         unresolved_thread_count: int = 0,
+        pending_reviewers: list[str] | None = None,
         draft: bool,
         created_at: str,
         updated_at: str,
@@ -133,22 +137,25 @@ class Database:
             """
             INSERT INTO pull_requests
                 (id, repo, number, title, state, url, author, user_roles,
-                 ci_status, review_decision, mergeable, unresolved_thread_count,
+                 ci_status, review_decision, mergeable, merge_state_status,
+                 unresolved_thread_count, pending_reviewers,
                  draft, created_at, updated_at, snapshot_hash, last_synced_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 title=excluded.title, state=excluded.state, url=excluded.url,
                 author=excluded.author, user_roles=excluded.user_roles,
                 ci_status=excluded.ci_status, review_decision=excluded.review_decision,
-                mergeable=excluded.mergeable,
+                mergeable=excluded.mergeable, merge_state_status=excluded.merge_state_status,
                 unresolved_thread_count=excluded.unresolved_thread_count,
+                pending_reviewers=excluded.pending_reviewers,
                 draft=excluded.draft, updated_at=excluded.updated_at,
                 snapshot_hash=excluded.snapshot_hash, last_synced_at=excluded.last_synced_at
             """,
             (
                 id, repo, number, title, state, url, author,
                 json.dumps(user_roles), ci_status, review_decision,
-                mergeable, unresolved_thread_count,
+                mergeable, merge_state_status, unresolved_thread_count,
+                json.dumps(pending_reviewers or []),
                 int(draft), created_at, updated_at, snapshot_hash, now,
             ),
         )

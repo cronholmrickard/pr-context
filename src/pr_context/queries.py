@@ -9,6 +9,7 @@ fragment PRFields on SearchResultItemConnection {
       url
       isDraft
       mergeable
+      mergeStateStatus
       author { login }
       repository { nameWithOwner }
       updatedAt
@@ -71,6 +72,7 @@ query($owner: String!, $repo: String!, $number: Int!) {
       url
       isDraft
       mergeable
+      mergeStateStatus
       body
       author { login }
       repository { nameWithOwner }
@@ -119,10 +121,14 @@ query($owner: String!, $repo: String!, $number: Int!) {
                     name
                     status
                     conclusion
+                    detailsUrl
+                    startedAt
+                    completedAt
                   }
                   ... on StatusContext {
                     context
                     state
+                    targetUrl
                   }
                 }
               }

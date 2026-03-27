@@ -3,7 +3,13 @@ import json
 import httpx
 import pytest
 
-from pr_context.github_client import GitHubClient, _make_pr_id, _parse_pr_summary
+from pr_context.github_client import (
+    GitHubClient,
+    _extract_pending_reviewers,
+    _make_pr_id,
+    _parse_ci_checks,
+    _parse_pr_summary,
+)
 
 
 def _make_pr_node(
@@ -69,6 +75,97 @@ def test_parse_pr_summary_ghost_author():
     node["author"] = None
     pr = _parse_pr_summary(node, "org/repo#1", [])
     assert pr.author == "ghost"
+
+
+class TestExtractPendingReviewers:
+    def test_no_requests(self):
+        node = {"reviewRequests": {"nodes": []}}
+        assert _extract_pending_reviewers(node) == []
+
+    def test_user_reviewer(self):
+        node = {"reviewRequests": {"nodes": [
+            {"requestedReviewer": {"login": "bob"}},
+        ]}}
+        assert _extract_pending_reviewers(node) == ["bob"]
+
+    def test_team_reviewer(self):
+        node = {"reviewRequests": {"nodes": [
+            {"requestedReviewer": {"name": "backend-team"}},
+        ]}}
+        assert _extract_pending_reviewers(node) == ["backend-team"]
+
+    def test_mixed_reviewers(self):
+        node = {"reviewRequests": {"nodes": [
+            {"requestedReviewer": {"login": "alice"}},
+            {"requestedReviewer": {"name": "frontend-team"}},
+        ]}}
+        assert _extract_pending_reviewers(node) == ["alice", "frontend-team"]
+
+    def test_null_reviewer(self):
+        node = {"reviewRequests": {"nodes": [
+            {"requestedReviewer": None},
+        ]}}
+        assert _extract_pending_reviewers(node) == []
+
+
+class TestParseCIChecks:
+    def test_parse_check_run_with_details(self):
+        pr = {
+            "commits": {"nodes": [{"commit": {"statusCheckRollup": {
+                "state": "FAILURE",
+                "contexts": {"nodes": [
+                    {
+                        "name": "build",
+                        "status": "COMPLETED",
+                        "conclusion": "SUCCESS",
+                        "detailsUrl": "https://github.com/org/repo/actions/runs/123",
+                        "startedAt": "2024-01-15T10:00:00Z",
+                        "completedAt": "2024-01-15T10:05:00Z",
+                    },
+                    {
+                        "name": "test",
+                        "status": "COMPLETED",
+                        "conclusion": "FAILURE",
+                        "detailsUrl": "https://github.com/org/repo/actions/runs/124",
+                        "startedAt": "2024-01-15T10:00:00Z",
+                        "completedAt": "2024-01-15T10:03:00Z",
+                    },
+                ]},
+            }}}]},
+        }
+        checks = _parse_ci_checks(pr)
+        assert len(checks) == 2
+        assert checks[0].name == "build"
+        assert checks[0].url == "https://github.com/org/repo/actions/runs/123"
+        assert checks[0].started_at == "2024-01-15T10:00:00Z"
+        assert checks[0].completed_at == "2024-01-15T10:05:00Z"
+        assert checks[1].conclusion == "FAILURE"
+
+    def test_parse_status_context_with_url(self):
+        pr = {
+            "commits": {"nodes": [{"commit": {"statusCheckRollup": {
+                "state": "SUCCESS",
+                "contexts": {"nodes": [
+                    {
+                        "context": "ci/circleci",
+                        "state": "SUCCESS",
+                        "targetUrl": "https://circleci.com/build/123",
+                    },
+                ]},
+            }}}]},
+        }
+        checks = _parse_ci_checks(pr)
+        assert len(checks) == 1
+        assert checks[0].name == "ci/circleci"
+        assert checks[0].url == "https://circleci.com/build/123"
+        assert checks[0].started_at is None
+
+    def test_empty_commits(self):
+        assert _parse_ci_checks({"commits": {"nodes": []}}) == []
+
+    def test_no_rollup(self):
+        pr = {"commits": {"nodes": [{"commit": {"statusCheckRollup": None}}]}}
+        assert _parse_ci_checks(pr) == []
 
 
 class TestGitHubClientFetchMyPrs:

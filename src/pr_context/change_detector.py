@@ -45,11 +45,24 @@ async def sync_and_detect(
             ci_status=pr.ci_status,
             review_decision=pr.review_decision,
             mergeable=pr.mergeable,
+            merge_state_status=pr.merge_state_status,
             unresolved_thread_count=pr.unresolved_thread_count,
+            pending_reviewers=pr.pending_reviewers,
             draft=pr.draft,
             created_at=pr.updated_at.isoformat(),
             updated_at=pr.updated_at.isoformat(),
             snapshot_hash=new_hash,
+        )
+
+        # Always fetch full details and store snapshot (comments, reviews, checks)
+        owner, rest = pr.repo.split("/", 1)
+        details = await github.fetch_pr_details(owner, rest, pr.number)
+
+        await db.upsert_snapshot(
+            details.id,
+            comments=[c.model_dump(mode="json") for c in details.comments],
+            reviews=[r.model_dump(mode="json") for r in details.reviews],
+            checks=[c.model_dump(mode="json") for c in details.ci_checks],
         )
 
         if old_hash is None:
@@ -60,19 +73,9 @@ async def sync_and_detect(
             # Nothing changed
             continue
 
-        # Something changed — fetch details and diff
-        owner, rest = pr.repo.split("/", 1)
-        details = await github.fetch_pr_details(owner, rest, pr.number)
+        # Something changed — diff for events
         events = await _diff_pr(db, pr, details, username)
         new_events.extend(events)
-
-        # Update snapshot
-        await db.upsert_snapshot(
-            details.id,
-            comments=[c.model_dump(mode="json") for c in details.comments],
-            reviews=[r.model_dump(mode="json") for r in details.reviews],
-            checks=[c.model_dump(mode="json") for c in details.ci_checks],
-        )
 
     # Detect removed PRs (closed/merged since last sync)
     known_ids = await db.get_all_pr_ids()

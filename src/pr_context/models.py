@@ -30,6 +30,9 @@ class CICheck(BaseModel):
     name: str
     status: str  # COMPLETED, IN_PROGRESS, QUEUED, etc.
     conclusion: str | None  # SUCCESS, FAILURE, NEUTRAL, etc.
+    url: str | None  # Link to CI job details
+    started_at: str | None
+    completed_at: str | None
 
 
 class PRSummary(BaseModel):
@@ -44,7 +47,9 @@ class PRSummary(BaseModel):
     ci_status: str | None
     review_decision: str | None
     mergeable: str | None  # MERGEABLE, CONFLICTING, UNKNOWN
+    merge_state_status: str | None = None  # BEHIND, BLOCKED, CLEAN, DIRTY, DRAFT, HAS_HOOKS, UNKNOWN, UNSTABLE
     unresolved_thread_count: int
+    pending_reviewers: list[str] = []
     draft: bool
     updated_at: datetime
 
@@ -64,6 +69,7 @@ class PRDetails(BaseModel):
     ci_checks: list[CICheck]
     review_decision: str | None
     mergeable: str | None  # MERGEABLE, CONFLICTING, UNKNOWN
+    merge_state_status: str | None = None  # BEHIND, BLOCKED, CLEAN, DIRTY, DRAFT, HAS_HOOKS, UNKNOWN, UNSTABLE
     unresolved_thread_count: int
     draft: bool
     created_at: datetime

@@ -70,7 +70,9 @@ async def _sync_prs() -> None:
             ci_status=pr.ci_status,
             review_decision=pr.review_decision,
             mergeable=pr.mergeable,
+            merge_state_status=pr.merge_state_status,
             unresolved_thread_count=pr.unresolved_thread_count,
+            pending_reviewers=pr.pending_reviewers,
             draft=pr.draft,
             created_at=pr.updated_at.isoformat(),
             updated_at=pr.updated_at.isoformat(),
@@ -174,6 +176,10 @@ async def get_my_prs(state: str = "open") -> list[dict]:
         user_roles = row["user_roles"]
         if isinstance(user_roles, str):
             user_roles = json.loads(user_roles)
+        pending_reviewers = row.get("pending_reviewers", "[]")
+        if isinstance(pending_reviewers, str):
+            pending_reviewers = json.loads(pending_reviewers)
+        review_decision = row["review_decision"]
         results.append({
             "index": i,
             "id": row["id"],
@@ -185,11 +191,15 @@ async def get_my_prs(state: str = "open") -> list[dict]:
             "author": row["author"],
             "user_roles": user_roles,
             "ci_status": row["ci_status"],
-            "review_decision": row["review_decision"],
+            "review_decision": review_decision,
+            "effective_review_state": _effective_review_state(review_decision, pending_reviewers),
+            "pending_reviewers": pending_reviewers,
             "mergeable": row.get("mergeable"),
+            "merge_state_status": row.get("merge_state_status"),
             "unresolved_threads": row.get("unresolved_thread_count", 0),
             "draft": bool(row["draft"]),
             "updated_at": row["updated_at"],
+            "last_comment": await _get_last_comment(row["id"]),
         })
 
     # Store index in metadata for persistence
@@ -340,6 +350,65 @@ async def get_pr_comments(pr_ref: str) -> dict:
 
 
 @mcp.tool()
+async def get_pr_ci(pr_ref: str) -> dict:
+    """Get detailed CI/check status for a PR — individual job names, statuses, conclusions, and links.
+
+    Args:
+        pr_ref: PR reference — use the index number from get_my_prs (e.g. "5"),
+                or full ID like "owner/repo#123".
+    """
+    assert github is not None and db is not None
+    await _load_index()
+
+    resolved = await _resolve_pr_ref(pr_ref)
+    if not resolved:
+        return {"error": f"Could not resolve PR reference '{pr_ref}'. Run get_my_prs first to see available PRs."}
+
+    pr_id, repo, number = resolved
+    parts = repo.split("/")
+    if len(parts) != 2:
+        return {"error": f"Invalid repo format '{repo}'"}
+
+    owner, repo_name = parts
+    details: PRDetails = await github.fetch_pr_details(owner, repo_name, number)
+
+    checks = []
+    for c in details.ci_checks:
+        check = {
+            "name": c.name,
+            "status": c.status,
+            "conclusion": c.conclusion,
+        }
+        if c.url:
+            check["url"] = c.url
+        if c.started_at:
+            check["started_at"] = c.started_at
+        if c.completed_at:
+            check["completed_at"] = c.completed_at
+        checks.append(check)
+
+    # Summarize
+    total = len(checks)
+    passed = sum(1 for c in checks if c.get("conclusion") in ("SUCCESS", "NEUTRAL", "SKIPPED"))
+    failed = sum(1 for c in checks if c.get("conclusion") == "FAILURE")
+    pending = sum(1 for c in checks if c.get("status") in ("IN_PROGRESS", "QUEUED", "PENDING"))
+
+    return {
+        "pr_id": pr_id,
+        "url": details.url,
+        "title": details.title,
+        "overall_status": details.ci_checks[0].status if details.ci_checks else None,
+        "checks": checks,
+        "summary": {
+            "total": total,
+            "passed": passed,
+            "failed": failed,
+            "pending": pending,
+        },
+    }
+
+
+@mcp.tool()
 async def get_pr_updates(since: str | None = None) -> dict:
     """Get new changes since last check, filtered and prioritized.
 
@@ -401,6 +470,10 @@ async def get_my_action_items() -> list[dict]:
 
         is_author = "author" in user_roles
         is_reviewer = "reviewer" in user_roles
+        pending_reviewers = row.get("pending_reviewers", "[]")
+        if isinstance(pending_reviewers, str):
+            pending_reviewers = json.loads(pending_reviewers)
+        effective_state = _effective_review_state(row.get("review_decision"), pending_reviewers)
 
         # Authored PR with failing CI
         if is_author and row.get("ci_status") == "FAILURE":
@@ -415,8 +488,8 @@ async def get_my_action_items() -> list[dict]:
                 "priority": 3,
             })
 
-        # Authored PR with changes requested
-        if is_author and row.get("review_decision") == "CHANGES_REQUESTED":
+        # Authored PR with changes requested (but NOT if re-review was requested)
+        if is_author and effective_state == "CHANGES_REQUESTED":
             items.append({
                 "action_type": "changes_requested",
                 "pr_id": row["id"],
@@ -428,8 +501,33 @@ async def get_my_action_items() -> list[dict]:
                 "priority": 3,
             })
 
-        # Reviewer with pending review
-        if is_reviewer and row.get("review_decision") == "REVIEW_REQUIRED":
+        # Authored PR where re-review was requested (lower priority — waiting on reviewer)
+        if is_author and effective_state == "RE_REVIEW_REQUESTED":
+            items.append({
+                "action_type": "re_review_requested",
+                "pr_id": row["id"],
+                "pr_number": row["number"],
+                "repo": row["repo"],
+                "title": row["title"],
+                "url": row["url"],
+                "reason": f"Waiting for re-review from {', '.join(pending_reviewers)}",
+                "priority": 1,
+            })
+
+        # Reviewer with pending review (initial or re-review)
+        if is_reviewer and username and username.lower() in [r.lower() for r in pending_reviewers]:
+            reason = "Re-review requested" if effective_state == "RE_REVIEW_REQUESTED" else "Your review is requested"
+            items.append({
+                "action_type": "needs_review",
+                "pr_id": row["id"],
+                "pr_number": row["number"],
+                "repo": row["repo"],
+                "title": row["title"],
+                "url": row["url"],
+                "reason": reason,
+                "priority": 2,
+            })
+        elif is_reviewer and row.get("review_decision") == "REVIEW_REQUIRED":
             items.append({
                 "action_type": "needs_review",
                 "pr_id": row["id"],
@@ -452,6 +550,19 @@ async def get_my_action_items() -> list[dict]:
                 "url": row["url"],
                 "reason": "PR has merge conflicts",
                 "priority": 2,
+            })
+
+        # Branch behind base
+        if is_author and row.get("merge_state_status") == "BEHIND":
+            items.append({
+                "action_type": "branch_behind",
+                "pr_id": row["id"],
+                "pr_number": row["number"],
+                "repo": row["repo"],
+                "title": row["title"],
+                "url": row["url"],
+                "reason": "Branch is behind base — needs update",
+                "priority": 1,
             })
 
         # Unresolved review threads
@@ -518,6 +629,7 @@ async def summarize_my_work_context() -> dict:
             "ci_status": row["ci_status"],
             "review_decision": row["review_decision"],
             "mergeable": row.get("mergeable"),
+            "merge_state_status": row.get("merge_state_status"),
             "unresolved_threads": row.get("unresolved_thread_count", 0),
             "draft": bool(row["draft"]),
             "updated_at": row["updated_at"],
@@ -553,6 +665,39 @@ async def summarize_my_work_context() -> dict:
             "action_items": len(action_items),
             "unread_events": len(unacked),
         },
+    }
+
+
+def _effective_review_state(review_decision: str | None, pending_reviewers: list[str]) -> str:
+    """Compute a more accurate review state from GitHub's reviewDecision + pending requests.
+
+    - CHANGES_REQUESTED with pending reviewers = re-review requested (author addressed feedback)
+    - CHANGES_REQUESTED with no pending reviewers = truly changes requested
+    - REVIEW_REQUIRED = waiting for initial review
+    - APPROVED = approved
+    """
+    if review_decision == "CHANGES_REQUESTED" and pending_reviewers:
+        return "RE_REVIEW_REQUESTED"
+    return review_decision or "NONE"
+
+
+async def _get_last_comment(pr_id: str) -> dict | None:
+    """Derive last comment from stored snapshot data."""
+    assert db is not None
+    snapshot = await db.get_snapshot(pr_id)
+    if not snapshot:
+        return None
+    comments = snapshot.get("comments", [])
+    if not comments:
+        return None
+    c = comments[-1]
+    body = c.get("body", "")
+    preview = body[:100] + "..." if len(body) > 100 else body
+    preview = preview.replace("\n", " ").strip()
+    return {
+        "author": c.get("author"),
+        "at": c.get("created_at"),
+        "preview": preview,
     }
 
 

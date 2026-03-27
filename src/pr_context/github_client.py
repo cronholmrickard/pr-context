@@ -127,6 +127,7 @@ class GitHubClient:
             ci_checks=ci_checks,
             review_decision=pr.get("reviewDecision"),
             mergeable=pr.get("mergeable"),
+            merge_state_status=pr.get("mergeStateStatus"),
             unresolved_thread_count=_count_unresolved_threads(pr),
             draft=pr["isDraft"],
             created_at=pr["createdAt"],
@@ -153,10 +154,26 @@ def _parse_pr_summary(node: dict, pr_id: str, roles: list[str]) -> PRSummary:
         ci_status=ci_status,
         review_decision=node.get("reviewDecision"),
         mergeable=node.get("mergeable"),
+        merge_state_status=node.get("mergeStateStatus"),
         unresolved_thread_count=_count_unresolved_threads(node),
+        pending_reviewers=_extract_pending_reviewers(node),
         draft=node["isDraft"],
         updated_at=node["updatedAt"],
     )
+
+
+def _extract_pending_reviewers(node: dict) -> list[str]:
+    """Extract list of pending reviewer logins/team names from review requests."""
+    requests = node.get("reviewRequests", {}).get("nodes", [])
+    reviewers = []
+    for req in requests:
+        reviewer = req.get("requestedReviewer", {})
+        if not reviewer:
+            continue
+        name = reviewer.get("login") or reviewer.get("name")
+        if name:
+            reviewers.append(name)
+    return reviewers
 
 
 def _count_unresolved_threads(node: dict) -> int:
@@ -212,11 +229,17 @@ def _parse_ci_checks(pr: dict) -> list[CICheck]:
                 name=ctx["name"],
                 status=ctx.get("status", "UNKNOWN"),
                 conclusion=ctx.get("conclusion"),
+                url=ctx.get("detailsUrl"),
+                started_at=ctx.get("startedAt"),
+                completed_at=ctx.get("completedAt"),
             ))
         elif "context" in ctx:
             checks.append(CICheck(
                 name=ctx["context"],
                 status=ctx.get("state", "UNKNOWN"),
                 conclusion=None,
+                url=ctx.get("targetUrl"),
+                started_at=None,
+                completed_at=None,
             ))
     return checks
