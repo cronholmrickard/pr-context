@@ -424,8 +424,10 @@ async def get_pr_updates(since: str | None = None) -> dict:
 
     events = await db.get_unacknowledged_events()
     count = await db.acknowledge_events()
+    last_sync = await db.get_metadata("last_full_sync")
 
     return {
+        "last_synced_at": last_sync,
         "events": [
             {
                 "event_type": e["event_type"],
