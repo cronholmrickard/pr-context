@@ -51,6 +51,7 @@ def _make_pr_details(**overrides) -> PRDetails:
         "body": "Test body",
         "comments": [],
         "reviews": [],
+        "review_threads": [],
         "ci_checks": [],
         "review_decision": None,
         "mergeable": "MERGEABLE",

@@ -79,7 +79,19 @@ query($owner: String!, $repo: String!, $number: Int!) {
       reviewDecision
       reviewThreads(first: 100) {
         totalCount
-        nodes { isResolved }
+        nodes {
+          isResolved
+          isOutdated
+          path
+          line
+          comments(first: 20) {
+            nodes {
+              author { login }
+              body
+              createdAt
+            }
+          }
+        }
       }
       comments(first: 100) {
         nodes {

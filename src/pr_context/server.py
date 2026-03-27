@@ -20,6 +20,9 @@ db: Database | None = None
 github: GitHubClient | None = None
 username: str | None = None
 
+# Index mapping: index number -> pr_id (rebuilt on each get_my_prs call)
+_pr_index: dict[int, str] = {}
+
 
 @asynccontextmanager
 async def lifespan(server: FastMCP):
@@ -108,25 +111,71 @@ async def _ensure_synced() -> None:
         await _sync_with_detection()
 
 
+async def _resolve_pr_ref(pr_ref: str) -> tuple[str, str, int] | None:
+    """Resolve a PR reference to (pr_id, owner/repo, number).
+
+    Accepts:
+    - Index number from get_my_prs (e.g. "5" or "#5")
+    - Full PR ID (e.g. "Link-Labs/l2s-frontend#1315")
+    - Repo + number (e.g. "l2s-frontend#1315" — matches partial repo name)
+    """
+    assert db is not None
+    ref = pr_ref.strip().lstrip("#")
+
+    # Try as index number
+    if ref.isdigit():
+        idx = int(ref)
+        pr_id = _pr_index.get(idx)
+        if pr_id:
+            parts = pr_id.split("#")
+            return pr_id, parts[0], int(parts[1])
+
+    # Try as full PR ID (owner/repo#number)
+    if "#" in pr_ref:
+        repo_part, num_part = pr_ref.rsplit("#", 1)
+        if num_part.isdigit():
+            number = int(num_part)
+            # Try exact match first
+            pr = await db.get_pr(pr_ref)
+            if pr:
+                return pr_ref, repo_part, number
+            # Try partial repo name match
+            all_ids = await db.get_all_pr_ids()
+            for pid in all_ids:
+                if pid.endswith(f"{repo_part}#{num_part}") or repo_part in pid:
+                    parts = pid.split("#")
+                    return pid, parts[0], int(parts[1])
+
+    return None
+
+
 @mcp.tool()
 async def get_my_prs(state: str = "open") -> list[dict]:
     """Get all PRs relevant to you (authored, reviewing, or assigned).
 
+    Each PR includes a short index number (e.g. #1, #2) that you can use
+    to reference it in other tools like get_pr_details or get_pr_threads.
+
     Args:
         state: Filter by PR state. Use "open" (default), "closed", "merged", or "all".
     """
+    global _pr_index
     assert db is not None
     await _ensure_synced()
 
     state_filter = state.upper() if state != "all" else None
     rows = await db.get_all_prs(state=state_filter)
 
+    # Rebuild index
+    _pr_index = {}
     results = []
-    for row in rows:
+    for i, row in enumerate(rows, 1):
+        _pr_index[i] = row["id"]
         user_roles = row["user_roles"]
         if isinstance(user_roles, str):
             user_roles = json.loads(user_roles)
         results.append({
+            "index": i,
             "id": row["id"],
             "repo": row["repo"],
             "number": row["number"],
@@ -143,25 +192,34 @@ async def get_my_prs(state: str = "open") -> list[dict]:
             "updated_at": row["updated_at"],
         })
 
+    # Store index in metadata for persistence
+    await db.set_metadata("pr_index", json.dumps({str(k): v for k, v in _pr_index.items()}))
+
     return results
 
 
 @mcp.tool()
-async def get_pr_details(repo: str, pr_number: int) -> dict:
+async def get_pr_details(pr_ref: str) -> dict:
     """Get full details for a specific PR including description, comments, reviews, and CI checks.
 
     Args:
-        repo: Repository in "owner/repo" format (e.g. "anthropics/claude-code").
-        pr_number: The PR number.
+        pr_ref: PR reference — use the index number from get_my_prs (e.g. "5"),
+                or full ID like "owner/repo#123".
     """
     assert github is not None and db is not None
+    await _load_index()
 
+    resolved = await _resolve_pr_ref(pr_ref)
+    if not resolved:
+        return {"error": f"Could not resolve PR reference '{pr_ref}'. Run get_my_prs first to see available PRs."}
+
+    pr_id, repo, number = resolved
     parts = repo.split("/")
     if len(parts) != 2:
-        return {"error": f"Invalid repo format '{repo}', expected 'owner/repo'"}
+        return {"error": f"Invalid repo format '{repo}'"}
 
     owner, repo_name = parts
-    details: PRDetails = await github.fetch_pr_details(owner, repo_name, pr_number)
+    details: PRDetails = await github.fetch_pr_details(owner, repo_name, number)
 
     # Store snapshot in DB
     await db.upsert_snapshot(
@@ -172,6 +230,113 @@ async def get_pr_details(repo: str, pr_number: int) -> dict:
     )
 
     return details.model_dump(mode="json")
+
+
+@mcp.tool()
+async def get_pr_threads(pr_ref: str, show_resolved: bool = False) -> dict:
+    """Get review threads for a PR, showing file path, comments, and resolution status.
+
+    Args:
+        pr_ref: PR reference — use the index number from get_my_prs (e.g. "5"),
+                or full ID like "owner/repo#123".
+        show_resolved: If True, include resolved threads. Default shows only unresolved.
+    """
+    assert github is not None and db is not None
+    await _load_index()
+
+    resolved = await _resolve_pr_ref(pr_ref)
+    if not resolved:
+        return {"error": f"Could not resolve PR reference '{pr_ref}'. Run get_my_prs first to see available PRs."}
+
+    pr_id, repo, number = resolved
+    parts = repo.split("/")
+    if len(parts) != 2:
+        return {"error": f"Invalid repo format '{repo}'"}
+
+    owner, repo_name = parts
+    details: PRDetails = await github.fetch_pr_details(owner, repo_name, number)
+
+    threads = []
+    for t in details.review_threads:
+        if not show_resolved and t.is_resolved:
+            continue
+        threads.append({
+            "is_resolved": t.is_resolved,
+            "is_outdated": t.is_outdated,
+            "path": t.path,
+            "line": t.line,
+            "comments": [
+                {
+                    "author": c.author,
+                    "body": c.body,
+                    "created_at": c.created_at.isoformat(),
+                }
+                for c in t.comments
+            ],
+        })
+
+    total = len(details.review_threads)
+    unresolved = sum(1 for t in details.review_threads if not t.is_resolved)
+
+    return {
+        "pr_id": pr_id,
+        "url": details.url,
+        "title": details.title,
+        "threads": threads,
+        "total_threads": total,
+        "unresolved_count": unresolved,
+        "resolved_count": total - unresolved,
+    }
+
+
+@mcp.tool()
+async def get_pr_comments(pr_ref: str) -> dict:
+    """Get all comments on a PR (top-level comments, not inline review threads).
+
+    Args:
+        pr_ref: PR reference — use the index number from get_my_prs (e.g. "5"),
+                or full ID like "owner/repo#123".
+    """
+    assert github is not None and db is not None
+    await _load_index()
+
+    resolved = await _resolve_pr_ref(pr_ref)
+    if not resolved:
+        return {"error": f"Could not resolve PR reference '{pr_ref}'. Run get_my_prs first to see available PRs."}
+
+    pr_id, repo, number = resolved
+    parts = repo.split("/")
+    if len(parts) != 2:
+        return {"error": f"Invalid repo format '{repo}'"}
+
+    owner, repo_name = parts
+    details: PRDetails = await github.fetch_pr_details(owner, repo_name, number)
+
+    return {
+        "pr_id": pr_id,
+        "url": details.url,
+        "title": details.title,
+        "comments": [
+            {
+                "author": c.author,
+                "body": c.body,
+                "created_at": c.created_at.isoformat(),
+            }
+            for c in details.comments
+        ],
+        "reviews": [
+            {
+                "author": r.author,
+                "state": r.state,
+                "body": r.body,
+                "submitted_at": r.submitted_at.isoformat(),
+            }
+            for r in details.reviews
+            if r.body  # skip empty review bodies
+        ],
+        "total_comments": len(details.comments),
+        "total_reviews": len(details.reviews),
+    }
 
 
 @mcp.tool()
@@ -217,6 +382,8 @@ async def get_my_action_items() -> list[dict]:
     - PRs where you are a reviewer and review is required
     - Your PRs with failing CI
     - Your PRs with changes requested
+    - PRs with merge conflicts
+    - PRs with unresolved review threads
     - PRs with unacknowledged high-priority events
     """
     assert db is not None and username is not None
@@ -350,6 +517,8 @@ async def summarize_my_work_context() -> dict:
             "url": row["url"],
             "ci_status": row["ci_status"],
             "review_decision": row["review_decision"],
+            "mergeable": row.get("mergeable"),
+            "unresolved_threads": row.get("unresolved_thread_count", 0),
             "draft": bool(row["draft"]),
             "updated_at": row["updated_at"],
         }
@@ -385,3 +554,15 @@ async def summarize_my_work_context() -> dict:
             "unread_events": len(unacked),
         },
     }
+
+
+async def _load_index() -> None:
+    """Load PR index from DB if not already in memory."""
+    global _pr_index
+    if _pr_index:
+        return
+    assert db is not None
+    raw = await db.get_metadata("pr_index")
+    if raw:
+        data = json.loads(raw)
+        _pr_index = {int(k): v for k, v in data.items()}

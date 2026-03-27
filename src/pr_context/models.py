@@ -18,6 +18,14 @@ class Review(BaseModel):
     submitted_at: datetime
 
 
+class ReviewThread(BaseModel):
+    is_resolved: bool
+    is_outdated: bool
+    path: str | None
+    line: int | None
+    comments: list[Comment]
+
+
 class CICheck(BaseModel):
     name: str
     status: str  # COMPLETED, IN_PROGRESS, QUEUED, etc.
@@ -52,6 +60,7 @@ class PRDetails(BaseModel):
     body: str
     comments: list[Comment]
     reviews: list[Review]
+    review_threads: list[ReviewThread]
     ci_checks: list[CICheck]
     review_decision: str | None
     mergeable: str | None  # MERGEABLE, CONFLICTING, UNKNOWN

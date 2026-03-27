@@ -5,7 +5,7 @@ from datetime import datetime
 
 import httpx
 
-from pr_context.models import CICheck, Comment, PRDetails, PRSummary, Review
+from pr_context.models import CICheck, Comment, PRDetails, PRSummary, Review, ReviewThread
 from pr_context.queries import PR_DETAIL, SEARCH_MY_PRS, VIEWER_LOGIN
 
 logger = logging.getLogger(__name__)
@@ -110,6 +110,7 @@ class GitHubClient:
         ]
 
         ci_checks = _parse_ci_checks(pr)
+        review_threads = _parse_review_threads(pr)
 
         return PRDetails(
             id=pr_id,
@@ -122,6 +123,7 @@ class GitHubClient:
             body=pr["body"] or "",
             comments=comments,
             reviews=reviews,
+            review_threads=review_threads,
             ci_checks=ci_checks,
             review_decision=pr.get("reviewDecision"),
             mergeable=pr.get("mergeable"),
@@ -161,6 +163,28 @@ def _count_unresolved_threads(node: dict) -> int:
     threads = node.get("reviewThreads", {})
     nodes = threads.get("nodes", [])
     return sum(1 for t in nodes if not t.get("isResolved", True))
+
+
+def _parse_review_threads(pr: dict) -> list[ReviewThread]:
+    threads_data = pr.get("reviewThreads", {}).get("nodes", [])
+    threads = []
+    for t in threads_data:
+        comments = [
+            Comment(
+                author=c["author"]["login"] if c.get("author") else "ghost",
+                body=c["body"],
+                created_at=c["createdAt"],
+            )
+            for c in t.get("comments", {}).get("nodes", [])
+        ]
+        threads.append(ReviewThread(
+            is_resolved=t.get("isResolved", False),
+            is_outdated=t.get("isOutdated", False),
+            path=t.get("path"),
+            line=t.get("line"),
+            comments=comments,
+        ))
+    return threads
 
 
 def _extract_ci_status(node: dict) -> str | None:
