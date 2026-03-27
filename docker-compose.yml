@@ -1,0 +1,10 @@
+services:
+  pr-context:
+    build: .
+    env_file: .env
+    volumes:
+      - pr-data:/data
+    stdin_open: true
+
+volumes:
+  pr-data:
