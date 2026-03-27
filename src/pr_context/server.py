@@ -239,6 +239,7 @@ async def get_my_action_items() -> list[dict]:
                 "pr_number": row["number"],
                 "repo": row["repo"],
                 "title": row["title"],
+                "url": row["url"],
                 "reason": "CI is failing on your PR",
                 "priority": 3,
             })
@@ -251,6 +252,7 @@ async def get_my_action_items() -> list[dict]:
                 "pr_number": row["number"],
                 "repo": row["repo"],
                 "title": row["title"],
+                "url": row["url"],
                 "reason": "Changes were requested on your PR",
                 "priority": 3,
             })
@@ -263,6 +265,7 @@ async def get_my_action_items() -> list[dict]:
                 "pr_number": row["number"],
                 "repo": row["repo"],
                 "title": row["title"],
+                "url": row["url"],
                 "reason": "Your review is requested",
                 "priority": 2,
             })
