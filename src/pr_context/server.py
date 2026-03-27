@@ -283,3 +283,71 @@ async def get_my_action_items() -> list[dict]:
     # Sort by priority descending
     items.sort(key=lambda x: x["priority"], reverse=True)
     return items
+
+
+@mcp.tool()
+async def summarize_my_work_context() -> dict:
+    """Get a structured summary of all your PRs, updates, and priorities.
+
+    Returns a complete picture of your current work context: authored PRs,
+    PRs you're reviewing, pending action items, and recent unacknowledged events.
+    Useful for starting your day or context-switching back to PR work.
+    """
+    assert db is not None and username is not None
+    await _ensure_synced()
+
+    rows = await db.get_all_prs(state="OPEN")
+    unacked = await db.get_unacknowledged_events()
+
+    authored = []
+    reviewing = []
+    other = []
+
+    for row in rows:
+        user_roles = row["user_roles"]
+        if isinstance(user_roles, str):
+            user_roles = json.loads(user_roles)
+
+        entry = {
+            "id": row["id"],
+            "number": row["number"],
+            "repo": row["repo"],
+            "title": row["title"],
+            "url": row["url"],
+            "ci_status": row["ci_status"],
+            "review_decision": row["review_decision"],
+            "draft": bool(row["draft"]),
+            "updated_at": row["updated_at"],
+        }
+
+        if "author" in user_roles:
+            authored.append(entry)
+        elif "reviewer" in user_roles:
+            reviewing.append(entry)
+        else:
+            other.append(entry)
+
+    action_items = await get_my_action_items()
+
+    return {
+        "user": username,
+        "authored_prs": authored,
+        "reviewing_prs": reviewing,
+        "other_prs": other,
+        "action_items": action_items,
+        "unread_events": [
+            {
+                "event_type": e["event_type"],
+                "pr_id": e["pr_id"],
+                "summary": e["summary"],
+                "priority": e["priority"],
+            }
+            for e in unacked
+        ],
+        "counts": {
+            "authored": len(authored),
+            "reviewing": len(reviewing),
+            "action_items": len(action_items),
+            "unread_events": len(unacked),
+        },
+    }

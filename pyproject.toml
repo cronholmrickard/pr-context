@@ -16,6 +16,9 @@ dependencies = [
     "python-dotenv",
 ]
 
+[project.scripts]
+pr-context = "pr_context.cli:cli"
+
 [project.optional-dependencies]
 dev = [
     "pytest",

@@ -24,15 +24,45 @@ cp .env.example .env
 ## Usage
 
 ```bash
-# Run MCP server
+# Run MCP server (stdio transport)
 python -m pr_context.server
-
-# Run tests
-pytest tests/
 
 # Docker
 docker compose build
 docker compose run --rm -i pr-context
+
+# Run tests
+pytest tests/
+```
+
+## Debug CLI
+
+```bash
+# Sync with GitHub and show new events
+pr-context check
+
+# List tracked PRs
+pr-context list
+pr-context list --state all
+
+# Show unacknowledged events
+pr-context events
+
+# Delete local database
+pr-context reset
+```
+
+## Claude Desktop / CLI Configuration
+
+```json
+{
+  "mcpServers": {
+    "pr-context": {
+      "command": "docker",
+      "args": ["compose", "-f", "/path/to/pr-context/docker-compose.yml", "run", "--rm", "-i", "pr-context"]
+    }
+  }
+}
 ```
 
 ## Configuration
@@ -51,3 +81,4 @@ Username is auto-detected from the GitHub token via `viewer { login }`.
 - **`get_pr_updates`** — Changes since last check, filtered and prioritized
 - **`get_pr_details`** — Full PR details (description, comments, reviews, CI)
 - **`get_my_action_items`** — PRs needing review, blocked/failing, items needing attention
+- **`summarize_my_work_context`** — Full snapshot of your current work: authored PRs, reviews, action items, unread events
