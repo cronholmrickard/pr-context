@@ -35,6 +35,8 @@ class PRSummary(BaseModel):
     user_roles: list[str]  # ["author", "reviewer", "assignee"]
     ci_status: str | None
     review_decision: str | None
+    mergeable: str | None  # MERGEABLE, CONFLICTING, UNKNOWN
+    unresolved_thread_count: int
     draft: bool
     updated_at: datetime
 
@@ -52,6 +54,8 @@ class PRDetails(BaseModel):
     reviews: list[Review]
     ci_checks: list[CICheck]
     review_decision: str | None
+    mergeable: str | None  # MERGEABLE, CONFLICTING, UNKNOWN
+    unresolved_thread_count: int
     draft: bool
     created_at: datetime
     updated_at: datetime

@@ -8,11 +8,16 @@ fragment PRFields on SearchResultItemConnection {
       state
       url
       isDraft
+      mergeable
       author { login }
       repository { nameWithOwner }
       updatedAt
       createdAt
       reviewDecision
+      reviewThreads(first: 100) {
+        totalCount
+        nodes { isResolved }
+      }
       commits(last: 1) {
         nodes {
           commit {
@@ -65,12 +70,17 @@ query($owner: String!, $repo: String!, $number: Int!) {
       state
       url
       isDraft
+      mergeable
       body
       author { login }
       repository { nameWithOwner }
       createdAt
       updatedAt
       reviewDecision
+      reviewThreads(first: 100) {
+        totalCount
+        nodes { isResolved }
+      }
       comments(first: 100) {
         nodes {
           author { login }

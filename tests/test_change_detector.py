@@ -30,6 +30,8 @@ def _make_pr_summary(**overrides) -> PRSummary:
         "user_roles": ["author"],
         "ci_status": "SUCCESS",
         "review_decision": None,
+        "mergeable": "MERGEABLE",
+        "unresolved_thread_count": 0,
         "draft": False,
         "updated_at": datetime(2026, 3, 27, tzinfo=timezone.utc),
     }
@@ -51,6 +53,8 @@ def _make_pr_details(**overrides) -> PRDetails:
         "reviews": [],
         "ci_checks": [],
         "review_decision": None,
+        "mergeable": "MERGEABLE",
+        "unresolved_thread_count": 0,
         "draft": False,
         "created_at": datetime(2026, 3, 26, tzinfo=timezone.utc),
         "updated_at": datetime(2026, 3, 27, tzinfo=timezone.utc),

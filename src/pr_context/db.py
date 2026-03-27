@@ -6,6 +6,8 @@ from pathlib import Path
 
 import aiosqlite
 
+SCHEMA_VERSION = "2"
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS pull_requests (
     id TEXT PRIMARY KEY,
@@ -18,6 +20,8 @@ CREATE TABLE IF NOT EXISTS pull_requests (
     user_roles TEXT DEFAULT '[]',
     ci_status TEXT,
     review_decision TEXT,
+    mergeable TEXT,
+    unresolved_thread_count INTEGER DEFAULT 0,
     draft INTEGER DEFAULT 0,
     created_at TEXT,
     updated_at TEXT,
@@ -62,7 +66,35 @@ class Database:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = await aiosqlite.connect(self.db_path)
         self._conn.row_factory = aiosqlite.Row
+
+        # Check schema version — if outdated, drop and recreate.
+        # All data is a cache from GitHub, safe to rebuild.
+        needs_reset = False
+        try:
+            cursor = await self._conn.execute(
+                "SELECT value FROM metadata WHERE key = 'schema_version'"
+            )
+            row = await cursor.fetchone()
+            if row is None or row["value"] != SCHEMA_VERSION:
+                needs_reset = True
+        except Exception:
+            needs_reset = True
+
+        if needs_reset:
+            await self._conn.executescript(
+                "DROP TABLE IF EXISTS pr_events;"
+                "DROP TABLE IF EXISTS pr_snapshots;"
+                "DROP TABLE IF EXISTS pull_requests;"
+                "DROP TABLE IF EXISTS metadata;"
+            )
+
         await self._conn.executescript(SCHEMA)
+        await self._conn.execute(
+            "INSERT INTO metadata (key, value) VALUES ('schema_version', ?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (SCHEMA_VERSION,),
+        )
+        await self._conn.commit()
 
     async def close(self) -> None:
         if self._conn:
@@ -89,6 +121,8 @@ class Database:
         user_roles: list[str],
         ci_status: str | None,
         review_decision: str | None,
+        mergeable: str | None = None,
+        unresolved_thread_count: int = 0,
         draft: bool,
         created_at: str,
         updated_at: str,
@@ -99,19 +133,22 @@ class Database:
             """
             INSERT INTO pull_requests
                 (id, repo, number, title, state, url, author, user_roles,
-                 ci_status, review_decision, draft, created_at, updated_at,
-                 snapshot_hash, last_synced_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 ci_status, review_decision, mergeable, unresolved_thread_count,
+                 draft, created_at, updated_at, snapshot_hash, last_synced_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 title=excluded.title, state=excluded.state, url=excluded.url,
                 author=excluded.author, user_roles=excluded.user_roles,
                 ci_status=excluded.ci_status, review_decision=excluded.review_decision,
+                mergeable=excluded.mergeable,
+                unresolved_thread_count=excluded.unresolved_thread_count,
                 draft=excluded.draft, updated_at=excluded.updated_at,
                 snapshot_hash=excluded.snapshot_hash, last_synced_at=excluded.last_synced_at
             """,
             (
                 id, repo, number, title, state, url, author,
                 json.dumps(user_roles), ci_status, review_decision,
+                mergeable, unresolved_thread_count,
                 int(draft), created_at, updated_at, snapshot_hash, now,
             ),
         )

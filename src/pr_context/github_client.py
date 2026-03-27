@@ -124,6 +124,8 @@ class GitHubClient:
             reviews=reviews,
             ci_checks=ci_checks,
             review_decision=pr.get("reviewDecision"),
+            mergeable=pr.get("mergeable"),
+            unresolved_thread_count=_count_unresolved_threads(pr),
             draft=pr["isDraft"],
             created_at=pr["createdAt"],
             updated_at=pr["updatedAt"],
@@ -148,9 +150,17 @@ def _parse_pr_summary(node: dict, pr_id: str, roles: list[str]) -> PRSummary:
         user_roles=roles,
         ci_status=ci_status,
         review_decision=node.get("reviewDecision"),
+        mergeable=node.get("mergeable"),
+        unresolved_thread_count=_count_unresolved_threads(node),
         draft=node["isDraft"],
         updated_at=node["updatedAt"],
     )
+
+
+def _count_unresolved_threads(node: dict) -> int:
+    threads = node.get("reviewThreads", {})
+    nodes = threads.get("nodes", [])
+    return sum(1 for t in nodes if not t.get("isResolved", True))
 
 
 def _extract_ci_status(node: dict) -> str | None:

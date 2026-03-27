@@ -38,6 +38,8 @@ def _make_pr_node(
             ]
         },
         "reviewRequests": {"nodes": []},
+        "reviewThreads": {"totalCount": 0, "nodes": []},
+        "mergeable": "MERGEABLE",
     }
 
 

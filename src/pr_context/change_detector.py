@@ -11,7 +11,10 @@ logger = logging.getLogger(__name__)
 
 
 def compute_snapshot_hash(pr: PRSummary) -> str:
-    blob = f"{pr.state}|{pr.title}|{pr.ci_status}|{pr.review_decision}|{pr.updated_at.isoformat()}"
+    blob = (
+        f"{pr.state}|{pr.title}|{pr.ci_status}|{pr.review_decision}"
+        f"|{pr.mergeable}|{pr.unresolved_thread_count}|{pr.updated_at.isoformat()}"
+    )
     return hashlib.sha256(blob.encode()).hexdigest()
 
 
@@ -41,6 +44,8 @@ async def sync_and_detect(
             user_roles=pr.user_roles,
             ci_status=pr.ci_status,
             review_decision=pr.review_decision,
+            mergeable=pr.mergeable,
+            unresolved_thread_count=pr.unresolved_thread_count,
             draft=pr.draft,
             created_at=pr.updated_at.isoformat(),
             updated_at=pr.updated_at.isoformat(),

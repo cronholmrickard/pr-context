@@ -66,6 +66,8 @@ async def _sync_prs() -> None:
             user_roles=pr.user_roles,
             ci_status=pr.ci_status,
             review_decision=pr.review_decision,
+            mergeable=pr.mergeable,
+            unresolved_thread_count=pr.unresolved_thread_count,
             draft=pr.draft,
             created_at=pr.updated_at.isoformat(),
             updated_at=pr.updated_at.isoformat(),
@@ -135,6 +137,8 @@ async def get_my_prs(state: str = "open") -> list[dict]:
             "user_roles": user_roles,
             "ci_status": row["ci_status"],
             "review_decision": row["review_decision"],
+            "mergeable": row.get("mergeable"),
+            "unresolved_threads": row.get("unresolved_thread_count", 0),
             "draft": bool(row["draft"]),
             "updated_at": row["updated_at"],
         })
@@ -267,6 +271,33 @@ async def get_my_action_items() -> list[dict]:
                 "title": row["title"],
                 "url": row["url"],
                 "reason": "Your review is requested",
+                "priority": 2,
+            })
+
+        # Merge conflicts
+        if is_author and row.get("mergeable") == "CONFLICTING":
+            items.append({
+                "action_type": "merge_conflict",
+                "pr_id": row["id"],
+                "pr_number": row["number"],
+                "repo": row["repo"],
+                "title": row["title"],
+                "url": row["url"],
+                "reason": "PR has merge conflicts",
+                "priority": 2,
+            })
+
+        # Unresolved review threads
+        unresolved = row.get("unresolved_thread_count", 0)
+        if is_author and unresolved > 0:
+            items.append({
+                "action_type": "unresolved_threads",
+                "pr_id": row["id"],
+                "pr_number": row["number"],
+                "repo": row["repo"],
+                "title": row["title"],
+                "url": row["url"],
+                "reason": f"{unresolved} unresolved review thread{'s' if unresolved != 1 else ''}",
                 "priority": 2,
             })
 
