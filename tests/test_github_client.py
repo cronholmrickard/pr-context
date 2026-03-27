@@ -5,6 +5,7 @@ import pytest
 
 from pr_context.github_client import (
     GitHubClient,
+    _extract_latest_commit_date,
     _extract_pending_reviewers,
     _make_pr_id,
     _parse_ci_checks,
@@ -29,6 +30,8 @@ def _make_pr_node(
         "state": state,
         "url": f"https://github.com/{repo}/pull/{number}",
         "isDraft": draft,
+        "headRefName": f"feature-branch-{number}",
+        "baseRefName": "main",
         "author": {"login": author},
         "repository": {"nameWithOwner": repo},
         "updatedAt": "2024-01-15T10:00:00Z",
@@ -38,6 +41,7 @@ def _make_pr_node(
             "nodes": [
                 {
                     "commit": {
+                        "committedDate": "2024-01-14T10:00:00Z",
                         "statusCheckRollup": {"state": ci_state} if ci_state else None
                     }
                 }
@@ -75,6 +79,27 @@ def test_parse_pr_summary_ghost_author():
     node["author"] = None
     pr = _parse_pr_summary(node, "org/repo#1", [])
     assert pr.author == "ghost"
+
+
+def test_parse_pr_summary_branch_info():
+    node = _make_pr_node(number=5, repo="org/repo")
+    pr = _parse_pr_summary(node, "org/repo#5", ["author"])
+    assert pr.head_branch == "feature-branch-5"
+    assert pr.base_branch == "main"
+    assert pr.latest_commit_date is not None
+
+
+class TestExtractLatestCommitDate:
+    def test_with_commit(self):
+        node = {"commits": {"nodes": [{"commit": {"committedDate": "2024-01-15T10:00:00Z"}}]}}
+        assert _extract_latest_commit_date(node) == "2024-01-15T10:00:00Z"
+
+    def test_no_commits(self):
+        assert _extract_latest_commit_date({"commits": {"nodes": []}}) is None
+
+    def test_missing_field(self):
+        node = {"commits": {"nodes": [{"commit": {}}]}}
+        assert _extract_latest_commit_date(node) is None
 
 
 class TestExtractPendingReviewers:

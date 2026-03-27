@@ -10,6 +10,8 @@ fragment PRFields on SearchResultItemConnection {
       isDraft
       mergeable
       mergeStateStatus
+      headRefName
+      baseRefName
       author { login }
       repository { nameWithOwner }
       updatedAt
@@ -22,6 +24,7 @@ fragment PRFields on SearchResultItemConnection {
       commits(last: 1) {
         nodes {
           commit {
+            committedDate
             statusCheckRollup {
               state
             }
@@ -73,6 +76,8 @@ query($owner: String!, $repo: String!, $number: Int!) {
       isDraft
       mergeable
       mergeStateStatus
+      headRefName
+      baseRefName
       body
       author { login }
       repository { nameWithOwner }
@@ -113,6 +118,7 @@ query($owner: String!, $repo: String!, $number: Int!) {
       commits(last: 1) {
         nodes {
           commit {
+            committedDate
             statusCheckRollup {
               state
               contexts(first: 50) {

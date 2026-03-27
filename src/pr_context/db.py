@@ -6,7 +6,7 @@ from pathlib import Path
 
 import aiosqlite
 
-SCHEMA_VERSION = "6"
+SCHEMA_VERSION = "7"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS pull_requests (
@@ -25,6 +25,9 @@ CREATE TABLE IF NOT EXISTS pull_requests (
     unresolved_thread_count INTEGER DEFAULT 0,
     pending_reviewers TEXT DEFAULT '[]',
     draft INTEGER DEFAULT 0,
+    head_branch TEXT,
+    base_branch TEXT,
+    latest_commit_date TEXT,
     created_at TEXT,
     updated_at TEXT,
     snapshot_hash TEXT,
@@ -128,6 +131,9 @@ class Database:
         unresolved_thread_count: int = 0,
         pending_reviewers: list[str] | None = None,
         draft: bool,
+        head_branch: str | None = None,
+        base_branch: str | None = None,
+        latest_commit_date: str | None = None,
         created_at: str,
         updated_at: str,
         snapshot_hash: str,
@@ -139,8 +145,9 @@ class Database:
                 (id, repo, number, title, state, url, author, user_roles,
                  ci_status, review_decision, mergeable, merge_state_status,
                  unresolved_thread_count, pending_reviewers,
-                 draft, created_at, updated_at, snapshot_hash, last_synced_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 draft, head_branch, base_branch, latest_commit_date,
+                 created_at, updated_at, snapshot_hash, last_synced_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 title=excluded.title, state=excluded.state, url=excluded.url,
                 author=excluded.author, user_roles=excluded.user_roles,
@@ -148,7 +155,9 @@ class Database:
                 mergeable=excluded.mergeable, merge_state_status=excluded.merge_state_status,
                 unresolved_thread_count=excluded.unresolved_thread_count,
                 pending_reviewers=excluded.pending_reviewers,
-                draft=excluded.draft, updated_at=excluded.updated_at,
+                draft=excluded.draft, head_branch=excluded.head_branch,
+                base_branch=excluded.base_branch, latest_commit_date=excluded.latest_commit_date,
+                updated_at=excluded.updated_at,
                 snapshot_hash=excluded.snapshot_hash, last_synced_at=excluded.last_synced_at
             """,
             (
@@ -156,7 +165,8 @@ class Database:
                 json.dumps(user_roles), ci_status, review_decision,
                 mergeable, merge_state_status, unresolved_thread_count,
                 json.dumps(pending_reviewers or []),
-                int(draft), created_at, updated_at, snapshot_hash, now,
+                int(draft), head_branch, base_branch, latest_commit_date,
+                created_at, updated_at, snapshot_hash, now,
             ),
         )
         await self.conn.commit()

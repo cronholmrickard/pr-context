@@ -51,6 +51,9 @@ class PRSummary(BaseModel):
     unresolved_thread_count: int
     pending_reviewers: list[str] = []
     draft: bool
+    head_branch: str | None = None
+    base_branch: str | None = None
+    latest_commit_date: datetime | None = None
     updated_at: datetime
 
 
@@ -72,6 +75,8 @@ class PRDetails(BaseModel):
     merge_state_status: str | None = None  # BEHIND, BLOCKED, CLEAN, DIRTY, DRAFT, HAS_HOOKS, UNKNOWN, UNSTABLE
     unresolved_thread_count: int
     draft: bool
+    head_branch: str | None = None
+    base_branch: str | None = None
     created_at: datetime
     updated_at: datetime
 

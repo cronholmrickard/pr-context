@@ -130,6 +130,8 @@ class GitHubClient:
             merge_state_status=pr.get("mergeStateStatus"),
             unresolved_thread_count=_count_unresolved_threads(pr),
             draft=pr["isDraft"],
+            head_branch=pr.get("headRefName"),
+            base_branch=pr.get("baseRefName"),
             created_at=pr["createdAt"],
             updated_at=pr["updatedAt"],
         )
@@ -158,6 +160,9 @@ def _parse_pr_summary(node: dict, pr_id: str, roles: list[str]) -> PRSummary:
         unresolved_thread_count=_count_unresolved_threads(node),
         pending_reviewers=_extract_pending_reviewers(node),
         draft=node["isDraft"],
+        head_branch=node.get("headRefName"),
+        base_branch=node.get("baseRefName"),
+        latest_commit_date=_extract_latest_commit_date(node),
         updated_at=node["updatedAt"],
     )
 
@@ -174,6 +179,14 @@ def _extract_pending_reviewers(node: dict) -> list[str]:
         if name:
             reviewers.append(name)
     return reviewers
+
+
+def _extract_latest_commit_date(node: dict) -> str | None:
+    """Extract the committed date of the latest commit."""
+    commits = node.get("commits", {}).get("nodes", [])
+    if not commits:
+        return None
+    return commits[0].get("commit", {}).get("committedDate")
 
 
 def _count_unresolved_threads(node: dict) -> int:
