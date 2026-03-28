@@ -592,6 +592,8 @@ async def _get_updates(role_filter: str) -> dict:
                  "reviewer" to get review PR events.
     """
     assert db is not None and username is not None
+    checked_at_key = f"last_checked_{role_filter}"
+    last_checked = await db.get_metadata(checked_at_key)
     previous_sync = await db.get_metadata("last_full_sync")
     await _ensure_synced()
 
@@ -625,7 +627,11 @@ async def _get_updates(role_filter: str) -> dict:
     filtered_ids = [e["id"] for e in filtered]
     count = await db.acknowledge_events(filtered_ids) if filtered_ids else 0
 
+    now = datetime.now(timezone.utc).isoformat()
+    await db.set_metadata(checked_at_key, now)
+
     return {
+        "last_checked_at": last_checked,
         "last_synced_at": previous_sync,
         "events": [
             {
