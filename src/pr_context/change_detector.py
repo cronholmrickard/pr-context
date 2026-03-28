@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 
@@ -28,7 +29,14 @@ async def sync_and_detect(
     current_ids = set()
     new_events: list[dict] = []
 
-    for pr in prs:
+    # Fetch all PR details concurrently
+    async def _fetch_details(pr: PRSummary) -> PRDetails:
+        owner, rest = pr.repo.split("/", 1)
+        return await github.fetch_pr_details(owner, rest, pr.number)
+
+    details_list = await asyncio.gather(*[_fetch_details(pr) for pr in prs])
+
+    for pr, details in zip(prs, details_list):
         current_ids.add(pr.id)
         new_hash = compute_snapshot_hash(pr)
         old_hash = await db.get_pr_snapshot_hash(pr.id)
@@ -58,10 +66,6 @@ async def sync_and_detect(
             updated_at=pr.updated_at.isoformat(),
             snapshot_hash=new_hash,
         )
-
-        # Always fetch full details and store snapshot (comments, reviews, checks)
-        owner, rest = pr.repo.split("/", 1)
-        details = await github.fetch_pr_details(owner, rest, pr.number)
 
         await db.upsert_snapshot(
             details.id,
