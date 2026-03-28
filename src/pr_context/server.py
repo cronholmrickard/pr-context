@@ -598,10 +598,11 @@ async def _get_updates(role_filter: str) -> dict:
     await _ensure_synced()
 
     if previous_sync is None:
+        now = datetime.now(timezone.utc).isoformat()
+        await db.set_metadata(checked_at_key, now)
         return {
             "first_sync": True,
             "message": "First sync complete — baseline snapshot saved. Use get_my_prs or get_my_reviews to see current state. Future calls will show changes since this point.",
-            "last_synced_at": await db.get_metadata("last_full_sync"),
             "events": [],
             "total": 0,
             "acknowledged": 0,
@@ -630,9 +631,7 @@ async def _get_updates(role_filter: str) -> dict:
     now = datetime.now(timezone.utc).isoformat()
     await db.set_metadata(checked_at_key, now)
 
-    return {
-        "last_checked_at": last_checked,
-        "last_synced_at": previous_sync,
+    result = {
         "events": [
             {
                 "event_type": e["event_type"],
@@ -648,6 +647,15 @@ async def _get_updates(role_filter: str) -> dict:
         "total": len(filtered),
         "acknowledged": count,
     }
+
+    if last_checked:
+        result["last_checked_at"] = last_checked
+    else:
+        result["message"] = (
+            "First update check — showing all unacknowledged events. Future calls will show changes since this point."
+        )
+
+    return result
 
 
 @mcp.tool()
