@@ -62,9 +62,9 @@ class GitHubClient:
     async def fetch_my_prs(self) -> list[PRSummary]:
         login = await self.get_viewer_login()
         variables = {
-            "author_q": f"is:pr author:{login} is:open",
-            "reviewer_q": f"is:pr reviewed-by:{login} is:open",
-            "assignee_q": f"is:pr assignee:{login} is:open",
+            "author_q": f"is:pr author:{login} is:open sort:updated",
+            "reviewer_q": f"is:pr reviewed-by:{login} is:open sort:updated",
+            "assignee_q": f"is:pr assignee:{login} is:open sort:updated",
         }
         data = await self._graphql(SEARCH_MY_PRS, variables)
 

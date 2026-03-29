@@ -44,19 +44,22 @@ fragment PRFields on SearchResultItemConnection {
 }
 """
 
-SEARCH_MY_PRS = """
+SEARCH_MY_PRS = (
+    """
 query($author_q: String!, $reviewer_q: String!, $assignee_q: String!) {
-  authored: search(query: $author_q, type: ISSUE, first: 50) {
+  authored: search(query: $author_q, type: ISSUE, first: 100) {
     ...PRFields
   }
-  reviewing: search(query: $reviewer_q, type: ISSUE, first: 50) {
+  reviewing: search(query: $reviewer_q, type: ISSUE, first: 100) {
     ...PRFields
   }
-  assigned: search(query: $assignee_q, type: ISSUE, first: 50) {
+  assigned: search(query: $assignee_q, type: ISSUE, first: 100) {
     ...PRFields
   }
 }
-""" + PR_FIELDS_FRAGMENT
+"""
+    + PR_FIELDS_FRAGMENT
+)
 
 VIEWER_LOGIN = """
 query {
