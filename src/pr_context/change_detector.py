@@ -29,17 +29,40 @@ async def sync_and_detect(
     current_ids = set()
     new_events: list[dict] = []
 
-    # Fetch all PR details concurrently
+    # Compute hashes and find which PRs need detail fetches
+    changed_prs: list[PRSummary] = []
+    unchanged_prs: list[PRSummary] = []
+    hashes: dict[str, tuple[str, str | None]] = {}  # pr_id -> (new_hash, old_hash)
+
+    for pr in prs:
+        current_ids.add(pr.id)
+        new_hash = compute_snapshot_hash(pr)
+        old_hash = await db.get_pr_snapshot_hash(pr.id)
+        hashes[pr.id] = (new_hash, old_hash)
+
+        if old_hash is None or new_hash != old_hash:
+            changed_prs.append(pr)
+        else:
+            unchanged_prs.append(pr)
+
+    # Fetch details only for new/changed PRs (concurrently)
     async def _fetch_details(pr: PRSummary) -> PRDetails:
         owner, rest = pr.repo.split("/", 1)
         return await github.fetch_pr_details(owner, rest, pr.number)
 
-    details_list = await asyncio.gather(*[_fetch_details(pr) for pr in prs])
+    details_list = await asyncio.gather(*[_fetch_details(pr) for pr in changed_prs])
+    details_map = {pr.id: details for pr, details in zip(changed_prs, details_list)}
 
-    for pr, details in zip(prs, details_list):
-        current_ids.add(pr.id)
-        new_hash = compute_snapshot_hash(pr)
-        old_hash = await db.get_pr_snapshot_hash(pr.id)
+    logger.info(
+        "Sync: %d PRs total, %d changed, %d skipped",
+        len(prs),
+        len(changed_prs),
+        len(unchanged_prs),
+    )
+
+    # Update all PRs in DB (summary data always updated)
+    for pr in prs:
+        new_hash, old_hash = hashes[pr.id]
 
         await db.upsert_pr(
             id=pr.id,
@@ -67,12 +90,14 @@ async def sync_and_detect(
             snapshot_hash=new_hash,
         )
 
-        await db.upsert_snapshot(
-            details.id,
-            comments=[c.model_dump(mode="json") for c in details.comments],
-            reviews=[r.model_dump(mode="json") for r in details.reviews],
-            checks=[c.model_dump(mode="json") for c in details.ci_checks],
-        )
+        details = details_map.get(pr.id)
+        if details:
+            await db.upsert_snapshot(
+                details.id,
+                comments=[c.model_dump(mode="json") for c in details.comments],
+                reviews=[r.model_dump(mode="json") for r in details.reviews],
+                checks=[c.model_dump(mode="json") for c in details.ci_checks],
+            )
 
         if old_hash is None:
             # New PR, no events needed
