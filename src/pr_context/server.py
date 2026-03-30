@@ -51,44 +51,6 @@ async def lifespan(server: FastMCP):
 mcp = FastMCP("pr-context", lifespan=lifespan)
 
 
-async def _sync_prs() -> None:
-    """Fetch PRs from GitHub, detect changes, store events."""
-    assert github is not None and db is not None and username is not None
-    prs = await github.fetch_my_prs()
-
-    for pr in prs:
-        snapshot_hash = compute_snapshot_hash(pr)
-        await db.upsert_pr(
-            id=pr.id,
-            repo=pr.repo,
-            number=pr.number,
-            title=pr.title,
-            state=pr.state,
-            url=pr.url,
-            author=pr.author,
-            user_roles=pr.user_roles,
-            ci_status=pr.ci_status,
-            review_decision=pr.review_decision,
-            mergeable=pr.mergeable,
-            merge_state_status=pr.merge_state_status,
-            unresolved_thread_count=pr.unresolved_thread_count,
-            pending_reviewers=pr.pending_reviewers,
-            draft=pr.draft,
-            head_branch=pr.head_branch,
-            base_branch=pr.base_branch,
-            latest_commit_date=(
-                pr.latest_commit_date.isoformat() if pr.latest_commit_date else None
-            ),
-            created_at=pr.updated_at.isoformat(),
-            updated_at=pr.updated_at.isoformat(),
-            snapshot_hash=snapshot_hash,
-        )
-
-    now = datetime.now(timezone.utc).isoformat()
-    await db.set_metadata("last_full_sync", now)
-    logger.info("Synced %d PRs", len(prs))
-
-
 async def _sync_with_detection() -> None:
     """Full sync with change detection and event generation."""
     assert github is not None and db is not None and username is not None
@@ -302,6 +264,8 @@ async def get_my_reviews(state: str = "open") -> list[dict]:
                 "last_comment": await _get_last_comment(row["id"]),
                 "your_last_review_at": your_review["at"] if your_review else None,
                 "your_last_review_state": your_review["state"] if your_review else None,
+                "re_review_requested": username.lower()
+                in [r.lower() for r in pending_reviewers],
                 "has_new_commits_since_review": has_new_commits,
                 "other_reviewers": other_reviews,
                 "waiting_since": waiting_since,
@@ -402,9 +366,23 @@ async def get_pr_details(pr_ref: str) -> dict:
         comments=[c.model_dump(mode="json") for c in details.comments],
         reviews=[r.model_dump(mode="json") for r in details.reviews],
         checks=[c.model_dump(mode="json") for c in details.ci_checks],
+        threads=[t.model_dump(mode="json") for t in details.review_threads],
     )
 
-    return details.model_dump(mode="json")
+    result = details.model_dump(mode="json")
+
+    # Enrich with effective review state from DB (pending_reviewers not in details model)
+    row = await db.get_pr(pr_id)
+    if row:
+        pending_reviewers = row.get("pending_reviewers", "[]")
+        if isinstance(pending_reviewers, str):
+            pending_reviewers = json.loads(pending_reviewers)
+        result["pending_reviewers"] = pending_reviewers
+        result["effective_review_state"] = _effective_review_state(
+            details.review_decision, pending_reviewers
+        )
+
+    return result
 
 
 @mcp.tool()
@@ -598,15 +576,29 @@ async def _get_updates(role_filter: str) -> dict:
     await _ensure_synced()
 
     if previous_sync is None:
+        # First sync — establish baseline and return current state
         now = datetime.now(timezone.utc).isoformat()
         await db.set_metadata(checked_at_key, now)
-        return {
-            "first_sync": True,
-            "message": "First sync complete — baseline snapshot saved. Use get_my_prs or get_my_reviews to see current state. Future calls will show changes since this point.",
-            "events": [],
-            "total": 0,
-            "acknowledged": 0,
-        }
+        # Acknowledge all first-sync events (they're baked into the PR list below)
+        all_first_events = await db.get_unacknowledged_events()
+        first_ids = [e["id"] for e in all_first_events]
+        if first_ids:
+            await db.acknowledge_events(first_ids)
+        # Return current PR state so the user gets useful data immediately
+        if role_filter == "author":
+            prs = await get_my_prs()
+            return {
+                "first_sync": True,
+                "message": "First sync complete — here are your current PRs. Future calls will show changes since this point.",
+                "prs": prs,
+            }
+        else:
+            reviews = await get_my_reviews()
+            return {
+                "first_sync": True,
+                "message": "First sync complete — here are PRs waiting for your review. Future calls will show changes since this point.",
+                "reviews": reviews,
+            }
 
     all_events = await db.get_unacknowledged_events()
 
@@ -802,27 +794,30 @@ async def get_my_action_items() -> list[dict]:
                 }
             )
 
-        # Unresolved review threads
+        # Unresolved review threads — only flag if author hasn't replied last
         unresolved = row.get("unresolved_thread_count", 0)
         if is_author and unresolved > 0:
-            items.append(
-                {
-                    "section": "as_author",
-                    "action_type": "unresolved_threads",
-                    "pr_id": row["id"],
-                    "pr_number": row["number"],
-                    "repo": row["repo"],
-                    "title": row["title"],
-                    "url": row["url"],
-                    "reason": f"{unresolved} unresolved review thread{'s' if unresolved != 1 else ''}",
-                    "priority": 2,
-                }
-            )
+            waiting_on_you = await _count_threads_waiting_on_author(row["id"], username)
+            if waiting_on_you > 0:
+                items.append(
+                    {
+                        "section": "as_author",
+                        "action_type": "unresolved_threads",
+                        "pr_id": row["id"],
+                        "pr_number": row["number"],
+                        "repo": row["repo"],
+                        "title": row["title"],
+                        "url": row["url"],
+                        "reason": f"{waiting_on_you} unresolved review thread{'s' if waiting_on_you != 1 else ''} awaiting your response",
+                        "priority": 2,
+                    }
+                )
 
-        # --- Reviewer action items ---
+        # --- Reviewer action items (skip if you're also the author) ---
 
         if (
             is_reviewer
+            and not is_author
             and username
             and username.lower() in [r.lower() for r in pending_reviewers]
         ):
@@ -851,7 +846,11 @@ async def get_my_action_items() -> list[dict]:
                     "priority": 2,
                 }
             )
-        elif is_reviewer and row.get("review_decision") == "REVIEW_REQUIRED":
+        elif (
+            is_reviewer
+            and not is_author
+            and row.get("review_decision") == "REVIEW_REQUIRED"
+        ):
             items.append(
                 {
                     "section": "as_reviewer",
@@ -990,6 +989,33 @@ async def _get_last_comment(pr_id: str) -> dict | None:
         "at": c.get("created_at"),
         "preview": preview,
     }
+
+
+async def _count_threads_waiting_on_author(pr_id: str, author: str) -> int:
+    """Count unresolved threads where the last comment is NOT from the author.
+
+    If the author already replied last, the ball is in the reviewer's court.
+    """
+    assert db is not None
+    snapshot = await db.get_snapshot(pr_id)
+    if not snapshot:
+        return 0
+
+    threads = snapshot.get("threads", [])
+    if not threads:
+        return 0
+
+    count = 0
+    for t in threads:
+        if t.get("is_resolved"):
+            continue
+        comments = t.get("comments", [])
+        if not comments:
+            continue
+        last_author = comments[-1].get("author", "")
+        if last_author.lower() != author.lower():
+            count += 1
+    return count
 
 
 async def _load_index() -> None:

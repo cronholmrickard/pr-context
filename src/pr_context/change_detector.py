@@ -4,6 +4,8 @@ import asyncio
 import hashlib
 import logging
 
+from datetime import datetime, timezone
+
 from pr_context.db import Database
 from pr_context.github_client import GitHubClient
 from pr_context.models import PRDetails, PRSummary
@@ -123,6 +125,7 @@ async def sync_and_detect(
                 comments=[c.model_dump(mode="json") for c in details.comments],
                 reviews=[r.model_dump(mode="json") for r in details.reviews],
                 checks=[c.model_dump(mode="json") for c in details.ci_checks],
+                threads=[t.model_dump(mode="json") for t in details.review_threads],
             )
 
     # Detect removed PRs (closed/merged since last sync)
@@ -140,6 +143,7 @@ async def sync_and_detect(
             )
             await db.add_event(**event)
             new_events.append(event)
+            await db.delete_pr(pr_id)
 
     return new_events
 
@@ -246,15 +250,19 @@ async def _diff_pr(
     old_comments = old_snapshot.get("comments", [])
     old_comment_ids = {c.get("id") for c in old_comments if c.get("id")}
     old_comment_keys = {
-        (c.get("author"), c.get("body"), c.get("created_at")) for c in old_comments
+        (c.get("author"), c.get("body"), _normalize_dt(c.get("created_at")))
+        for c in old_comments
     }
     for comment in details.comments:
         if comment.id and comment.id in old_comment_ids:
             continue
-        if not comment.id:
-            key = (comment.author, comment.body, comment.created_at.isoformat())
-            if key in old_comment_keys:
-                continue
+        key = (
+            comment.author,
+            comment.body,
+            _normalize_dt(comment.created_at.isoformat()),
+        )
+        if key in old_comment_keys:
+            continue
         events.append(
             _make_event(
                 pr_id=pr.id,
@@ -269,15 +277,19 @@ async def _diff_pr(
     old_reviews = old_snapshot.get("reviews", [])
     old_review_ids = {r.get("id") for r in old_reviews if r.get("id")}
     old_review_keys = {
-        (r.get("author"), r.get("state"), r.get("submitted_at")) for r in old_reviews
+        (r.get("author"), r.get("state"), _normalize_dt(r.get("submitted_at")))
+        for r in old_reviews
     }
     for review in details.reviews:
         if review.id and review.id in old_review_ids:
             continue
-        if not review.id:
-            key = (review.author, review.state, review.submitted_at.isoformat())
-            if key in old_review_keys:
-                continue
+        key = (
+            review.author,
+            review.state,
+            _normalize_dt(review.submitted_at.isoformat()),
+        )
+        if key in old_review_keys:
+            continue
         priority = 2 if is_author else 1
         events.append(
             _make_event(
@@ -316,6 +328,17 @@ def _make_event(
         "summary": summary,
         "priority": priority,
     }
+
+
+def _normalize_dt(value: str | None) -> str:
+    """Normalize datetime strings so Z and +00:00 compare equal."""
+    if not value:
+        return ""
+    try:
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return dt.astimezone(timezone.utc).isoformat()
+    except (ValueError, TypeError):
+        return value
 
 
 def _truncate(text: str, length: int = 80) -> str:

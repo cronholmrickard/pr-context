@@ -6,7 +6,7 @@ from pathlib import Path
 
 import aiosqlite
 
-SCHEMA_VERSION = "7"
+SCHEMA_VERSION = "8"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS pull_requests (
@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS pr_snapshots (
     comments_json TEXT DEFAULT '[]',
     reviews_json TEXT DEFAULT '[]',
     checks_json TEXT DEFAULT '[]',
+    threads_json TEXT DEFAULT '[]',
     updated_at TEXT
 );
 
@@ -216,6 +217,11 @@ class Database:
         row = await cursor.fetchone()
         return row["snapshot_hash"] if row else None
 
+    async def delete_pr(self, pr_id: str) -> None:
+        await self.conn.execute("DELETE FROM pull_requests WHERE id = ?", (pr_id,))
+        await self.conn.execute("DELETE FROM pr_snapshots WHERE pr_id = ?", (pr_id,))
+        await self.conn.commit()
+
     async def get_all_pr_ids(self) -> set[str]:
         cursor = await self.conn.execute("SELECT id FROM pull_requests")
         rows = await cursor.fetchall()
@@ -230,19 +236,28 @@ class Database:
         comments: list[dict],
         reviews: list[dict],
         checks: list[dict],
+        threads: list[dict] | None = None,
     ) -> None:
         now = datetime.now(timezone.utc).isoformat()
         await self.conn.execute(
             """
-            INSERT INTO pr_snapshots (pr_id, comments_json, reviews_json, checks_json, updated_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO pr_snapshots (pr_id, comments_json, reviews_json, checks_json, threads_json, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(pr_id) DO UPDATE SET
                 comments_json=excluded.comments_json,
                 reviews_json=excluded.reviews_json,
                 checks_json=excluded.checks_json,
+                threads_json=excluded.threads_json,
                 updated_at=excluded.updated_at
             """,
-            (pr_id, json.dumps(comments), json.dumps(reviews), json.dumps(checks), now),
+            (
+                pr_id,
+                json.dumps(comments),
+                json.dumps(reviews),
+                json.dumps(checks),
+                json.dumps(threads or []),
+                now,
+            ),
         )
         await self.conn.commit()
 
@@ -258,6 +273,7 @@ class Database:
             "comments": json.loads(row["comments_json"]),
             "reviews": json.loads(row["reviews_json"]),
             "checks": json.loads(row["checks_json"]),
+            "threads": json.loads(row["threads_json"]),
             "updated_at": row["updated_at"],
         }
 
