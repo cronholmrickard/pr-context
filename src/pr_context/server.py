@@ -683,12 +683,13 @@ async def get_my_action_items() -> list[dict]:
     """Get PRs that need your attention — reviews to do, CI failures, requested changes.
 
     Computed from current state:
-    - PRs where you are a reviewer and review is required
     - Your PRs with failing CI
-    - Your PRs with changes requested
-    - PRs with merge conflicts
-    - PRs with unresolved review threads
-    - PRs with unacknowledged high-priority events
+    - Your PRs with changes requested (not yet re-submitted)
+    - Your PRs with merge conflicts
+    - Your approved PRs that are behind base (blocking merge)
+    - Your PRs with unresolved review threads awaiting your response
+    - PRs where your review is requested
+    - Unacknowledged high-priority events
     """
     assert db is not None and username is not None
     await _ensure_synced()
@@ -746,22 +747,6 @@ async def get_my_action_items() -> list[dict]:
                 }
             )
 
-        # Authored PR where re-review was requested (lower priority — waiting on reviewer)
-        if is_author and effective_state == "RE_REVIEW_REQUESTED":
-            items.append(
-                {
-                    "section": "as_author",
-                    "action_type": "re_review_requested",
-                    "pr_id": row["id"],
-                    "pr_number": row["number"],
-                    "repo": row["repo"],
-                    "title": row["title"],
-                    "url": row["url"],
-                    "reason": f"Waiting for re-review from {', '.join(pending_reviewers)}",
-                    "priority": 1,
-                }
-            )
-
         # Merge conflicts
         if is_author and row.get("mergeable") == "CONFLICTING":
             items.append(
@@ -778,8 +763,12 @@ async def get_my_action_items() -> list[dict]:
                 }
             )
 
-        # Branch behind base
-        if is_author and row.get("merge_state_status") == "BEHIND":
+        # Branch behind base — only actionable if approved and ready to merge
+        if (
+            is_author
+            and row.get("merge_state_status") == "BEHIND"
+            and row.get("review_decision") == "APPROVED"
+        ):
             items.append(
                 {
                     "section": "as_author",
@@ -789,8 +778,8 @@ async def get_my_action_items() -> list[dict]:
                     "repo": row["repo"],
                     "title": row["title"],
                     "url": row["url"],
-                    "reason": "Branch is behind base — needs update",
-                    "priority": 1,
+                    "reason": "Approved but branch is behind base — update to merge",
+                    "priority": 2,
                 }
             )
 
