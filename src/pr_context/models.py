@@ -6,12 +6,14 @@ from pydantic import BaseModel
 
 
 class Comment(BaseModel):
+    id: str | None = None
     author: str
     body: str
     created_at: datetime
 
 
 class Review(BaseModel):
+    id: str | None = None
     author: str
     state: str  # APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED, PENDING
     body: str

@@ -105,6 +105,7 @@ query($owner: String!, $repo: String!, $number: Int!) {
       }
       comments(first: 100) {
         nodes {
+          id
           author { login }
           body
           createdAt
@@ -112,6 +113,7 @@ query($owner: String!, $repo: String!, $number: Int!) {
       }
       reviews(first: 50) {
         nodes {
+          id
           author { login }
           state
           body

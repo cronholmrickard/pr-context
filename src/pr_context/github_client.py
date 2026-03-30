@@ -99,6 +99,7 @@ class GitHubClient:
 
         comments = [
             Comment(
+                id=c.get("id"),
                 author=c["author"]["login"] if c["author"] else "ghost",
                 body=c["body"],
                 created_at=c["createdAt"],
@@ -108,6 +109,7 @@ class GitHubClient:
 
         reviews = [
             Review(
+                id=r.get("id"),
                 author=r["author"]["login"] if r["author"] else "ghost",
                 state=r["state"],
                 body=r["body"] or "",

@@ -46,24 +46,51 @@ async def sync_and_detect(
             unchanged_prs.append(pr)
 
     # Fetch details only for new/changed PRs (concurrently)
-    async def _fetch_details(pr: PRSummary) -> PRDetails:
-        owner, rest = pr.repo.split("/", 1)
-        return await github.fetch_pr_details(owner, rest, pr.number)
+    async def _fetch_details(pr: PRSummary) -> PRDetails | None:
+        try:
+            owner, rest = pr.repo.split("/", 1)
+            return await github.fetch_pr_details(owner, rest, pr.number)
+        except Exception:
+            logger.exception("Failed to fetch details for %s", pr.id)
+            return None
 
     details_list = await asyncio.gather(*[_fetch_details(pr) for pr in changed_prs])
-    details_map = {pr.id: details for pr, details in zip(changed_prs, details_list)}
+    details_map = {
+        pr.id: details
+        for pr, details in zip(changed_prs, details_list)
+        if details is not None
+    }
 
     logger.info(
-        "Sync: %d PRs total, %d changed, %d skipped",
+        "Sync: %d PRs total, %d changed, %d skipped, %d fetch errors",
         len(prs),
         len(changed_prs),
         len(unchanged_prs),
+        len(changed_prs) - len(details_map),
     )
 
-    # Update all PRs in DB (summary data always updated)
+    # Process each PR: diff BEFORE updating DB
     for pr in prs:
         new_hash, old_hash = hashes[pr.id]
+        details = details_map.get(pr.id)
 
+        # New PR — always generate event
+        if old_hash is None:
+            new_events.append(
+                _make_event(
+                    pr_id=pr.id,
+                    event_type="new_pr_tracked",
+                    actor=None,
+                    summary=f"New PR: {pr.title} ({pr.repo}#{pr.number})",
+                    priority=1,
+                )
+            )
+        # Existing PR changed — diff against old state BEFORE we overwrite it
+        elif new_hash != old_hash and details:
+            events = await _diff_pr(db, pr, details, username)
+            new_events.extend(events)
+
+        # Now update DB with new state
         await db.upsert_pr(
             id=pr.id,
             repo=pr.repo,
@@ -90,7 +117,6 @@ async def sync_and_detect(
             snapshot_hash=new_hash,
         )
 
-        details = details_map.get(pr.id)
         if details:
             await db.upsert_snapshot(
                 details.id,
@@ -98,18 +124,6 @@ async def sync_and_detect(
                 reviews=[r.model_dump(mode="json") for r in details.reviews],
                 checks=[c.model_dump(mode="json") for c in details.ci_checks],
             )
-
-        if old_hash is None:
-            # New PR, no events needed
-            continue
-
-        if new_hash == old_hash:
-            # Nothing changed
-            continue
-
-        # Something changed — diff for events
-        events = await _diff_pr(db, pr, details, username)
-        new_events.extend(events)
 
     # Detect removed PRs (closed/merged since last sync)
     known_ids = await db.get_all_pr_ids()
@@ -228,42 +242,52 @@ async def _diff_pr(
     if not old_snapshot:
         return _filter_own_events(events, username)
 
-    # New comments
+    # New comments (use GitHub node ID for dedup, fall back to content key)
     old_comments = old_snapshot.get("comments", [])
-    old_comment_set = {
+    old_comment_ids = {c.get("id") for c in old_comments if c.get("id")}
+    old_comment_keys = {
         (c.get("author"), c.get("body"), c.get("created_at")) for c in old_comments
     }
     for comment in details.comments:
-        key = (comment.author, comment.body, comment.created_at.isoformat())
-        if key not in old_comment_set:
-            events.append(
-                _make_event(
-                    pr_id=pr.id,
-                    event_type="new_comment",
-                    actor=comment.author,
-                    summary=f"{comment.author} commented on {pr.title}: {_truncate(comment.body)}",
-                    priority=1,
-                )
+        if comment.id and comment.id in old_comment_ids:
+            continue
+        if not comment.id:
+            key = (comment.author, comment.body, comment.created_at.isoformat())
+            if key in old_comment_keys:
+                continue
+        events.append(
+            _make_event(
+                pr_id=pr.id,
+                event_type="new_comment",
+                actor=comment.author,
+                summary=f"{comment.author} commented on {pr.title}: {_truncate(comment.body)}",
+                priority=1,
             )
+        )
 
-    # New reviews
+    # New reviews (use GitHub node ID for dedup, fall back to content key)
     old_reviews = old_snapshot.get("reviews", [])
-    old_review_set = {
+    old_review_ids = {r.get("id") for r in old_reviews if r.get("id")}
+    old_review_keys = {
         (r.get("author"), r.get("state"), r.get("submitted_at")) for r in old_reviews
     }
     for review in details.reviews:
-        key = (review.author, review.state, review.submitted_at.isoformat())
-        if key not in old_review_set:
-            priority = 2 if is_author else 1
-            events.append(
-                _make_event(
-                    pr_id=pr.id,
-                    event_type="new_review",
-                    actor=review.author,
-                    summary=f"{review.author} reviewed {pr.title}: {review.state}",
-                    priority=priority,
-                )
+        if review.id and review.id in old_review_ids:
+            continue
+        if not review.id:
+            key = (review.author, review.state, review.submitted_at.isoformat())
+            if key in old_review_keys:
+                continue
+        priority = 2 if is_author else 1
+        events.append(
+            _make_event(
+                pr_id=pr.id,
+                event_type="new_review",
+                actor=review.author,
+                summary=f"{review.author} reviewed {pr.title}: {review.state}",
+                priority=priority,
             )
+        )
 
     return _filter_own_events(events, username)
 
