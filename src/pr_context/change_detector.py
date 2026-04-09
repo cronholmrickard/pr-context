@@ -186,6 +186,26 @@ async def _diff_pr(
                         priority=0,
                     )
                 )
+            elif new_ci == "SUCCESS" and old_ci in (None, "IN_PROGRESS"):
+                events.append(
+                    _make_event(
+                        pr_id=pr.id,
+                        event_type="ci_passed",
+                        actor=None,
+                        summary=f"CI passed: {pr.title}",
+                        priority=1 if is_author else 0,
+                    )
+                )
+            elif new_ci == "FAILURE" and not is_author:
+                events.append(
+                    _make_event(
+                        pr_id=pr.id,
+                        event_type="ci_failed",
+                        actor=None,
+                        summary=f"CI failed: {pr.title}",
+                        priority=0,
+                    )
+                )
 
     # Review decision change
     if old_pr:
@@ -301,7 +321,14 @@ async def _diff_pr(
             )
         )
 
-    return _filter_own_events(events, username)
+    events = _filter_own_events(events, username)
+
+    # Draft PRs always have priority 0
+    if pr.draft:
+        for e in events:
+            e["priority"] = 0
+
+    return events
 
 
 def _filter_own_events(events: list[dict], username: str) -> list[dict]:

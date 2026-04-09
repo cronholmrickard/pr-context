@@ -64,6 +64,7 @@ class GitHubClient:
         variables = {
             "author_q": f"is:pr author:{login} is:open sort:updated",
             "reviewer_q": f"is:pr reviewed-by:{login} is:open sort:updated",
+            "review_requested_q": f"is:pr review-requested:{login} is:open sort:updated",
             "assignee_q": f"is:pr assignee:{login} is:open sort:updated",
         }
         data = await self._graphql(SEARCH_MY_PRS, variables)
@@ -74,6 +75,7 @@ class GitHubClient:
         for category, role in [
             ("authored", "author"),
             ("reviewing", "reviewer"),
+            ("review_requested", "reviewer"),
             ("assigned", "assignee"),
         ]:
             for node in data[category]["nodes"]:

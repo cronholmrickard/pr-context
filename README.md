@@ -519,6 +519,22 @@ Full snapshot of your current work context.
 
 </details>
 
+### Priority System
+
+Events and action items are assigned a priority level based on your role and urgency. **Draft PRs always have priority 0 regardless of other signals.**
+
+| Priority | Level | As Author | As Reviewer |
+|---|---|---|---|
+| **3** | Urgent | CI failed, changes requested | — |
+| **2** | High | New review received, approved but blocked | Review requested, re-review requested, new comments by others |
+| **1** | Normal | New comments, CI passed, PR status change | — |
+| **0** | Low | CI recovered, draft | Already approved, CI status change, your comment is last, draft |
+
+Key behaviors:
+- **Who commented last matters:** If you're a reviewer and your comment/review is the most recent activity, the ball is in the author's court — no action item is generated.
+- **Draft override:** Any PR in draft state is always priority 0, regardless of CI, reviews, or other signals.
+- **CI for reviewers:** CI status changes on PRs you're reviewing are always priority 0 — CI failures are the author's problem.
+
 ### Key Features
 - PRs are referenced by index number (e.g. `#1`, `#5`) across all tools
 - Smart review state: distinguishes `CHANGES_REQUESTED` from `RE_REVIEW_REQUESTED` (author re-requested review)

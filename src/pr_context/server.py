@@ -221,7 +221,7 @@ async def get_my_reviews(state: str = "open") -> list[dict]:
         if "reviewer" not in user_roles:
             continue
         # Exclude PRs you authored — those belong in get_my_prs
-        if "author" in user_roles or "assignee" in user_roles:
+        if "author" in user_roles:
             continue
 
         pending_reviewers = row.get("pending_reviewers", "[]")
@@ -706,12 +706,17 @@ async def get_my_action_items() -> list[dict]:
 
         is_author = "author" in user_roles
         is_reviewer = "reviewer" in user_roles
+        is_draft = bool(row.get("draft"))
         pending_reviewers = row.get("pending_reviewers", "[]")
         if isinstance(pending_reviewers, str):
             pending_reviewers = json.loads(pending_reviewers)
         effective_state = _effective_review_state(
             row.get("review_decision"), pending_reviewers
         )
+
+        # Draft PRs are always low priority
+        if is_draft:
+            continue
 
         # --- Author action items ---
 
@@ -804,12 +809,14 @@ async def get_my_action_items() -> list[dict]:
 
         # --- Reviewer action items (skip if you're also the author) ---
 
-        if (
-            is_reviewer
-            and not is_author
-            and username
-            and username.lower() in [r.lower() for r in pending_reviewers]
-        ):
+        if not is_reviewer or is_author:
+            continue
+
+        # If you commented/reviewed last, the ball is in their court
+        if await _user_commented_last(row["id"], username):
+            continue
+
+        if username and username.lower() in [r.lower() for r in pending_reviewers]:
             # Check for new commits since last review
             your_review, _, has_new_commits, _ = await _get_review_context(
                 row["id"],
@@ -835,11 +842,7 @@ async def get_my_action_items() -> list[dict]:
                     "priority": 2,
                 }
             )
-        elif (
-            is_reviewer
-            and not is_author
-            and row.get("review_decision") == "REVIEW_REQUIRED"
-        ):
+        elif row.get("review_decision") == "REVIEW_REQUIRED":
             items.append(
                 {
                     "section": "as_reviewer",
@@ -1005,6 +1008,38 @@ async def _count_threads_waiting_on_author(pr_id: str, author: str) -> int:
         if last_author.lower() != author.lower():
             count += 1
     return count
+
+
+async def _user_commented_last(pr_id: str, user: str) -> bool:
+    """Check if the user was the last to comment or review on a PR.
+
+    Looks at both top-level comments and review submissions to find the
+    most recent interaction. Returns True if the user spoke last, meaning
+    the ball is in someone else's court.
+    """
+    assert db is not None
+    snapshot = await db.get_snapshot(pr_id)
+    if not snapshot:
+        return False
+
+    latest_at: str | None = None
+    latest_author: str | None = None
+
+    for c in snapshot.get("comments", []):
+        at = c.get("created_at")
+        if at and (latest_at is None or at > latest_at):
+            latest_at = at
+            latest_author = c.get("author")
+
+    for r in snapshot.get("reviews", []):
+        at = r.get("submitted_at")
+        if at and (latest_at is None or at > latest_at):
+            latest_at = at
+            latest_author = r.get("author")
+
+    if latest_author is None:
+        return False
+    return latest_author.lower() == user.lower()
 
 
 async def _load_index() -> None:

@@ -28,10 +28,10 @@ Local-first MCP server that tracks GitHub PRs and exposes high-signal developer 
 - User's own actions are always filtered out
 
 ### Priority System
-- **3 (urgent):** CI failure on authored PR, changes-requested on authored PR
-- **2 (high):** Review requested from user, new review on authored PR
-- **1 (normal):** New comments, PR status change
-- **0 (low):** CI recovered to green, draft status change
+- Draft PRs always have priority 0 regardless of other signals
+- As author: **3** CI failed / changes requested, **2** new review / approved but blocked, **1** new comments / CI passed, **0** CI recovered / draft
+- As reviewer: **2** review requested / re-review requested / new comments by others, **0** already approved / CI change / your comment is last / draft
+- "Who commented last" determines reviewer action items — if your comment/review is most recent, no action item is generated
 
 ### MCP Tools
 - `get_my_prs` — authored/assigned PRs with CI, review state, merge status, branches, last comment
