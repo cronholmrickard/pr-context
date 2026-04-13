@@ -519,6 +519,14 @@ Full snapshot of your current work context.
 
 </details>
 
+## Examples
+
+### From action items to code fix
+
+Asking Claude "which PRs need my attention?" surfaces unresolved review threads, merge conflicts, and new events. From there you can drill into a specific PR, see what the reviewer asked for, switch to the branch, and apply the fix — all without leaving the conversation.
+
+![Action items to code fix](examples/action-items-to-fix.gif)
+
 ### Priority System
 
 Events and action items are assigned a priority level based on your role and urgency. **Draft PRs always have priority 0 regardless of other signals.**
