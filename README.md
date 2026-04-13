@@ -2,6 +2,14 @@
 
 Local-first MCP server that tracks GitHub PRs and exposes high-signal developer context to Claude. Not an API wrapper — a stateful signal engine that adds temporal awareness and relevance filtering.
 
+## Examples
+
+### From action items to code fix
+
+Asking Claude "which PRs need my attention?" surfaces unresolved review threads, merge conflicts, and new events. From there you can drill into a specific PR, see what the reviewer asked for, switch to the branch, and apply the fix — all without leaving the conversation.
+
+![Action items to code fix](examples/action-items-to-fix.gif)
+
 ## Stack
 
 - Python 3.12, async throughout
@@ -518,14 +526,6 @@ Full snapshot of your current work context.
 ```
 
 </details>
-
-## Examples
-
-### From action items to code fix
-
-Asking Claude "which PRs need my attention?" surfaces unresolved review threads, merge conflicts, and new events. From there you can drill into a specific PR, see what the reviewer asked for, switch to the branch, and apply the fix — all without leaving the conversation.
-
-![Action items to code fix](examples/action-items-to-fix.gif)
 
 ### Priority System
 
