@@ -542,6 +542,7 @@ Key behaviors:
 - **Who commented last matters:** If you're a reviewer and your comment/review is the most recent activity, the ball is in the author's court — no action item is generated.
 - **Draft override:** Any PR in draft state is always priority 0, regardless of CI, reviews, or other signals.
 - **CI for reviewers:** CI status changes on PRs you're reviewing are always priority 0 — CI failures are the author's problem.
+- **Stale event suppression:** Unread events are deduplicated by PR + summary, and automatically suppressed if you've acted on the PR (commented or reviewed) after the event was created.
 
 ### Key Features
 - PRs are referenced by index number (e.g. `#1`, `#5`) across all tools

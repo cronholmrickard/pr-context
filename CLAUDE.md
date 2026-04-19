@@ -32,6 +32,7 @@ Local-first MCP server that tracks GitHub PRs and exposes high-signal developer 
 - As author: **3** CI failed / changes requested, **2** new review / approved but blocked, **1** new comments / CI passed, **0** CI recovered / draft
 - As reviewer: **2** review requested / re-review requested / new comments by others, **0** already approved / CI change / your comment is last / draft
 - "Who commented last" determines reviewer action items — if your comment/review is most recent, no action item is generated
+- Unread events are deduplicated by PR + summary, and suppressed if the user has acted on the PR after the event was created
 
 ### MCP Tools
 - `get_my_prs` — authored/assigned PRs with CI, review state, merge status, branches, last comment
