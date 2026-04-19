@@ -857,20 +857,32 @@ async def get_my_action_items() -> list[dict]:
                 }
             )
 
-    # Add high-priority unacknowledged events
+    # Add high-priority unacknowledged events, skipping stale ones
+    # where the user has already acted on the PR after the event
+    seen_events: set[tuple[str, str]] = set()
     for e in unacked:
-        if e["priority"] >= 2:
-            items.append(
-                {
-                    "action_type": "unread_event",
-                    "pr_id": e["pr_id"],
-                    "pr_number": e["pr_number"],
-                    "repo": e["repo"],
-                    "title": e["summary"],
-                    "reason": e["summary"],
-                    "priority": e["priority"],
-                }
-            )
+        if e["priority"] < 2:
+            continue
+        # Deduplicate by pr_id + summary
+        dedup_key = (e["pr_id"], e["summary"])
+        if dedup_key in seen_events:
+            continue
+        seen_events.add(dedup_key)
+        # Skip events superseded by the user's own activity
+        event_at = e.get("created_at", "")
+        if event_at and await _user_acted_after(e["pr_id"], username, event_at):
+            continue
+        items.append(
+            {
+                "action_type": "unread_event",
+                "pr_id": e["pr_id"],
+                "pr_number": e["pr_number"],
+                "repo": e["repo"],
+                "title": e["summary"],
+                "reason": e["summary"],
+                "priority": e["priority"],
+            }
+        )
 
     # Sort by priority descending
     items.sort(key=lambda x: x["priority"], reverse=True)
@@ -1008,6 +1020,30 @@ async def _count_threads_waiting_on_author(pr_id: str, author: str) -> int:
         if last_author.lower() != author.lower():
             count += 1
     return count
+
+
+async def _user_acted_after(pr_id: str, user: str, after: str) -> bool:
+    """Check if the user commented or reviewed on a PR after the given timestamp.
+
+    Used to filter out stale unread events — if you've already acted on the PR
+    since the event was created, it's no longer actionable.
+    """
+    assert db is not None
+    snapshot = await db.get_snapshot(pr_id)
+    if not snapshot:
+        return False
+
+    for c in snapshot.get("comments", []):
+        if (c.get("author") or "").lower() == user.lower():
+            if (c.get("created_at") or "") > after:
+                return True
+
+    for r in snapshot.get("reviews", []):
+        if (r.get("author") or "").lower() == user.lower():
+            if (r.get("submitted_at") or "") > after:
+                return True
+
+    return False
 
 
 async def _user_commented_last(pr_id: str, user: str) -> bool:
