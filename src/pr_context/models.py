@@ -17,7 +17,7 @@ class Review(BaseModel):
     author: str
     state: str  # APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED, PENDING
     body: str
-    submitted_at: datetime
+    submitted_at: datetime | None = None
 
 
 class ReviewThread(BaseModel):

@@ -488,7 +488,7 @@ async def get_pr_comments(pr_ref: str) -> dict:
                 "author": r.author,
                 "state": r.state,
                 "body": r.body,
-                "submitted_at": r.submitted_at.isoformat(),
+                "submitted_at": r.submitted_at.isoformat() if r.submitted_at else None,
             }
             for r in details.reviews
             if r.body  # skip empty review bodies

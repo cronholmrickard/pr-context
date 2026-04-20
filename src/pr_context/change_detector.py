@@ -306,7 +306,9 @@ async def _diff_pr(
         key = (
             review.author,
             review.state,
-            _normalize_dt(review.submitted_at.isoformat()),
+            _normalize_dt(
+                review.submitted_at.isoformat() if review.submitted_at else None
+            ),
         )
         if key in old_review_keys:
             continue
